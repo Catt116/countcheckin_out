@@ -1,0 +1,1388 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Check-In/Out Balance Calculator</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts Inter & Orbitron -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['Orbitron', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom scrollbar styling to make the scroll view look beautiful in light/dark themes */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(148, 163, 184, 0.08);
+            border-radius: 4px;
+        }
+        .dark ::-webkit-scrollbar-track {
+            background: rgba(30, 41, 59, 0.4);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(148, 163, 184, 0.35);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(148, 163, 184, 0.55);
+        }
+    </style>
+</head>
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 min-h-full font-sans antialiased transition-colors duration-300">
+
+    <nav class="border-b border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-950/80 backdrop-blur sticky top-0 z-50 px-4 py-3 sm:px-6 transition-colors duration-300">
+        <div class="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div class="flex items-center gap-3">
+                <div class="bg-gradient-to-tr from-indigo-500 to-violet-600 p-2.5 rounded-xl shadow-lg shadow-indigo-500/20">
+                    <i class="fa-solid fa-clock-rotate-left text-xl text-white"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
+                        Check-in/out Record Calculator
+                    </h1>
+                    <p class="text-xs text-slate-550 dark:text-slate-400 font-medium">Dual-Target Optimizer & AI Reader</p>
+                </div>
+            </div>
+            
+            <div class="flex items-center gap-3">
+                <span class="text-xs text-slate-500 dark:text-slate-400 font-medium">System Presets:</span>
+                <button onclick="applyPreset('um')" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-505 text-white rounded-lg text-xs font-semibold transition-all shadow-md shadow-indigo-600/10">
+                    36h/wk
+                </button>
+                <button onclick="applyPreset('standard')" class="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-semibold transition-all">
+                    Abnormal (40h/wk)
+                </button>
+                <button onclick="toggleDarkMode()" class="p-2 bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-650 dark:text-slate-300 rounded-lg transition-all" title="Toggle Theme">
+                    <i id="theme-icon" class="fa-solid fa-moon"></i>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8 space-y-6">
+        
+        <!-- Live Toast Notification Container -->
+        <div id="toast-container" class="fixed top-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+        <!-- System Paste Guidelines Alert Card -->
+        <div class="bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800/80 border-l-4 border-l-indigo-500 p-4 rounded-r-xl shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 transition-colors duration-300">
+            <div class="flex items-start gap-3">
+                <i class="fa-solid fa-robot text-indigo-500 dark:text-indigo-400 text-lg mt-0.5 animate-bounce"></i>
+                <div>
+                    <h3 class="font-bold text-sm text-slate-900 dark:text-slate-200">AI Screenshot Recognition & Multi-Input System</h3>
+                    <p class="text-xs text-slate-550 dark:text-slate-400 mt-1 leading-relaxed">
+                        To populate records instantly, you can either **drag-and-drop a portal screenshot** or copy-paste raw portal text below.
+                        Values will be formatted and loaded without layout truncation.
+                    </p>
+                </div>
+            </div>
+            <div class="flex gap-2 shrink-0">
+                <button onclick="loadDemoData()" class="px-3.5 py-1.5 bg-white hover:bg-slate-50 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-750 dark:text-slate-200 text-xs font-semibold rounded-lg transition-all border border-slate-200 dark:border-slate-750 shadow-sm flex items-center gap-1.5">
+                    <i class="fa-solid fa-database text-indigo-500"></i> Load Demo Table
+                </button>
+            </div>
+        </div>
+
+        <!-- Dashboard Statistics Rows -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div class="bg-white dark:bg-slate-950 p-4 rounded-xl border border-slate-200 dark:border-slate-800/80 shadow-sm relative overflow-hidden group transition-colors duration-300">
+                <div class="absolute right-3 top-3 opacity-10 group-hover:opacity-20 transition-opacity">
+                    <i class="fa-solid fa-calendar-week text-4xl text-indigo-500"></i>
+                </div>
+                <p class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Weekly Required</p>
+                <div class="flex items-baseline gap-1 mt-2">
+                    <span id="stat-required" class="text-2xl font-bold text-slate-950 dark:text-white font-mono">36.00</span>
+                    <span class="text-xs text-slate-400 dark:text-slate-500 font-medium">hrs</span>
+                </div>
+                <div class="w-full bg-slate-100 dark:bg-slate-850 h-1.5 rounded-full mt-3 overflow-hidden">
+                    <div id="bar-required" class="bg-indigo-500 h-full rounded-full transition-all duration-500" style="width: 100%"></div>
+                </div>
+            </div>
+
+            <div class="bg-white dark:bg-slate-950 p-4 rounded-xl border border-slate-200 dark:border-slate-800/80 shadow-sm relative overflow-hidden group transition-colors duration-300">
+                <div class="absolute right-3 top-3 opacity-10 group-hover:opacity-20 transition-opacity">
+                    <i class="fa-solid fa-briefcase text-4xl text-emerald-500"></i>
+                </div>
+                <p class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Worked So Far</p>
+                <div class="flex items-baseline gap-1 mt-2">
+                    <span id="stat-worked" class="text-2xl font-bold text-emerald-600 dark:text-emerald-400 font-mono">12.74</span>
+                    <span class="text-xs text-slate-400 dark:text-slate-500 font-medium">hrs</span>
+                </div>
+                <div class="w-full bg-slate-100 dark:bg-slate-850 h-1.5 rounded-full mt-3 overflow-hidden">
+                    <div id="bar-worked" class="bg-emerald-500 h-full rounded-full transition-all duration-500" style="width: 35.4%"></div>
+                </div>
+            </div>
+
+            <div class="bg-white dark:bg-slate-950 p-4 rounded-xl border border-slate-200 dark:border-slate-800/80 shadow-sm relative overflow-hidden group transition-colors duration-300">
+                <div class="absolute right-3 top-3 opacity-10 group-hover:opacity-20 transition-opacity">
+                    <i class="fa-solid fa-scale-unbalanced text-4xl text-amber-500"></i>
+                </div>
+                <p class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Remaining Balance</p>
+                <div class="flex items-baseline gap-1 mt-2">
+                    <span id="stat-balance" class="text-2xl font-bold text-amber-600 dark:text-amber-400 font-mono">23.26</span>
+                    <span class="text-xs text-slate-400 dark:text-slate-500 font-medium">hrs</span>
+                </div>
+                <div class="w-full bg-slate-100 dark:bg-slate-850 h-1.5 rounded-full mt-3 overflow-hidden">
+                    <div id="bar-balance" class="bg-amber-500 h-full rounded-full transition-all duration-500" style="width: 64.6%"></div>
+                </div>
+            </div>
+
+            <div class="bg-white dark:bg-slate-950 p-4 rounded-xl border border-slate-200 dark:border-slate-800/80 shadow-sm relative overflow-hidden group transition-colors duration-300">
+                <div class="absolute right-3 top-3 opacity-10 group-hover:opacity-20 transition-opacity">
+                    <i class="fa-solid fa-hourglass-half text-4xl text-pink-500"></i>
+                </div>
+                <p class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Accumulated Deficit</p>
+                <div class="flex items-baseline gap-1 mt-2">
+                    <span id="stat-deficit" class="text-2xl font-bold text-pink-600 dark:text-pink-400 font-mono">1.76</span>
+                    <span class="text-xs text-slate-400 dark:text-slate-500 font-medium">hrs</span>
+                </div>
+                <p class="text-[10px] text-slate-500 dark:text-slate-400 mt-3 flex items-center gap-1 font-medium">
+                    <i class="fa-solid fa-triangle-exclamation text-pink-500"></i> Deficits carry forward to Target 2
+                </p>
+            </div>
+        </div>
+
+        <!-- Departure Optimizer Cockpit Container -->
+        <div class="bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800/80 rounded-xl shadow-md overflow-hidden relative transition-all duration-300">
+            <div class="h-1.5 w-full bg-gradient-to-r from-indigo-500 via-purple-500 to-violet-600"></div>
+            
+            <div class="p-6 space-y-6">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
+                    <div>
+                        <span class="text-indigo-600 dark:text-indigo-400 text-xs font-bold uppercase tracking-wider">Departure Optimizer Cockpit</span>
+                        <h2 class="text-xl font-extrabold text-slate-900 dark:text-white mt-0.5 flex items-center gap-2">
+                            <span id="selected-day-label">Tuesday 02/06</span>
+                            <span id="active-badge" class="px-2.5 py-0.5 text-[10px] bg-emerald-550/10 text-emerald-700 dark:text-emerald-400 rounded-full border border-emerald-500/20 font-bold animate-pulse">Active Focus</span>
+                        </h2>
+                    </div>
+
+                    <!-- Simulator Controls -->
+                    <div class="bg-slate-100 dark:bg-slate-900/60 p-2 rounded-lg border border-slate-200 dark:border-slate-800 flex items-center gap-3">
+                        <div class="flex flex-col">
+                            <span class="text-[9px] text-slate-505 dark:text-slate-400 uppercase font-bold">Simulator Clock</span>
+                            <input type="time" id="sim-time" value="15:30" onchange="triggerRecalculate()" class="bg-white dark:bg-slate-950 text-indigo-600 dark:text-indigo-300 border border-slate-200 dark:border-slate-800 rounded text-xs p-1 font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                        </div>
+                        <label class="flex items-center gap-1.5 text-xs text-slate-650 dark:text-slate-400 cursor-pointer font-semibold select-none mt-3">
+                            <input type="checkbox" id="use-realtime" checked onchange="toggleRealtime()" class="accent-indigo-500 h-4 w-4"> Real Time
+                        </label>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    
+                    <!-- TARGET 1: TODAY'S STAND-ALONE DAILY TARGET -->
+                    <div class="bg-slate-50 dark:bg-slate-900/40 p-5 rounded-xl border border-slate-200 dark:border-slate-850 flex flex-col justify-between transition-colors">
+                        <div>
+                            <div class="flex justify-between items-start">
+                                <span class="bg-indigo-100 dark:bg-indigo-950/60 text-indigo-800 dark:text-indigo-300 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider">
+                                    Target 1: Today's 0-Balance
+                                </span>
+                                <span class="text-xs font-bold text-slate-450 dark:text-slate-500" id="lbl-goal-standard">Goal: 7.25 hrs</span>
+                            </div>
+                            
+                            <div class="my-4 text-center">
+                                <p class="text-[10px] uppercase tracking-widest text-slate-500 dark:text-slate-450 font-bold">Time Left Today</p>
+                                <p id="std-countdown" class="text-4xl font-mono font-black text-slate-850 dark:text-slate-100 tracking-wider my-1">00:00:00</p>
+                                <div id="std-context" class="text-xs text-indigo-600 dark:text-indigo-400 font-semibold">Calculating standard exit...</div>
+                            </div>
+                        </div>
+
+                        <div class="space-y-3 pt-3 border-t border-slate-200 dark:border-slate-800">
+                            <!-- Target Leave Stats -->
+                            <div class="flex justify-between items-center text-xs">
+                                <span class="text-slate-550 dark:text-slate-400 font-medium">Standard Leave Time:</span>
+                                <span id="std-leave-time" class="font-mono font-bold text-slate-900 dark:text-white text-sm">--:--</span>
+                            </div>
+                            <!-- Progress Bar -->
+                            <div class="w-full bg-slate-200 dark:bg-slate-950 h-2.5 rounded-full overflow-hidden border border-slate-200 dark:border-slate-850">
+                                <div id="std-progress-bar" class="bg-indigo-500 h-full rounded-full transition-all duration-300" style="width: 0%"></div>
+                            </div>
+                            <div class="flex justify-between text-[10px] text-slate-500 dark:text-slate-400 font-bold">
+                                <span id="std-lbl-in">In: --:--</span>
+                                <span id="std-lbl-progress">0% Completed</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- TARGET 2: WEEK CUMULATIVE CATCH-UP TARGET -->
+                    <div class="bg-slate-50 dark:bg-slate-900/40 p-5 rounded-xl border border-slate-200 dark:border-slate-850 flex flex-col justify-between transition-colors">
+                        <div>
+                            <div class="flex justify-between items-start">
+                                <span class="bg-violet-100 dark:bg-violet-950/60 text-violet-800 dark:text-violet-300 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider">
+                                    Target 2: Weekly 0-Balance
+                                </span>
+                                <span class="text-xs font-bold text-slate-450 dark:text-slate-500" id="lbl-goal-cumulative">Goal: 8.43 hrs</span>
+                            </div>
+
+                            <div class="my-4 text-center">
+                                <p class="text-[10px] uppercase tracking-widest text-slate-500 dark:text-slate-450 font-bold">Time Left for Week Catch-Up</p>
+                                <p id="cum-countdown" class="text-4xl font-mono font-black text-slate-850 dark:text-slate-100 tracking-wider my-1">00:00:00</p>
+                                <div id="cum-context" class="text-xs text-violet-600 dark:text-violet-400 font-semibold">Calculating weekly payoff exit...</div>
+                            </div>
+                        </div>
+
+                        <div class="space-y-3 pt-3 border-t border-slate-200 dark:border-slate-800">
+                            <!-- Target Leave Stats -->
+                            <div class="flex justify-between items-center text-xs">
+                                <span class="text-slate-550 dark:text-slate-400 font-medium">Weekly Catch-up Leave Time:</span>
+                                <span id="cum-leave-time" class="font-mono font-bold text-slate-900 dark:text-white text-sm">--:--</span>
+                            </div>
+                            <!-- Progress Bar -->
+                            <div class="w-full bg-slate-200 dark:bg-slate-950 h-2.5 rounded-full overflow-hidden border border-slate-200 dark:border-slate-850">
+                                <div id="cum-progress-bar" class="bg-violet-500 h-full rounded-full transition-all duration-300" style="width: 0%"></div>
+                            </div>
+                            <div class="flex justify-between text-[10px] text-slate-500 dark:text-slate-400 font-bold">
+                                <span id="cum-lbl-in">In: --:--</span>
+                                <span id="cum-lbl-progress">0% Completed</span>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+                    
+                    <!-- Audio notification reminder panel -->
+                    <div class="flex items-center justify-between bg-slate-50/50 dark:bg-slate-900/30 p-3 rounded-lg border border-slate-200 dark:border-slate-850">
+                        <div class="flex items-center gap-2.5">
+                            <i class="fa-solid fa-bell text-indigo-500"></i>
+                            <div>
+                                <p class="text-xs font-bold text-slate-800 dark:text-slate-200">Audio Reminders</p>
+                                <p class="text-[10px] text-slate-500 dark:text-slate-400">Chime when target times are met</p>
+                            </div>
+                        </div>
+                        <button onclick="toggleAudio()" id="btn-audio" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-650 dark:text-slate-300 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-all border border-slate-200 dark:border-transparent">
+                            <i class="fa-solid fa-bell-slash text-slate-400"></i> Disabled
+                        </button>
+                    </div>
+
+                    <!-- Custom Offset modifier -->
+                    <div class="flex items-center justify-between bg-slate-50/50 dark:bg-slate-900/30 p-3 rounded-lg border border-slate-200 dark:border-slate-850">
+                        <div>
+                            <span class="text-xs text-slate-800 dark:text-slate-200 font-bold">Custom Extra Time Goal</span>
+                            <p class="text-[10px] text-slate-500 dark:text-slate-400">Fudge factor added/subtracted to daily hours</p>
+                        </div>
+                        <div class="flex items-center gap-1.5 font-mono">
+                            <input type="number" id="custom-goal-input" step="0.1" value="0.0" onchange="triggerRecalculate()" class="w-14 bg-white dark:bg-slate-950 text-slate-950 dark:text-white rounded border border-slate-200 dark:border-slate-800 p-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-indigo-500 font-bold">
+                            <span class="text-xs text-slate-550 dark:text-slate-400 font-bold">hrs</span>
+                        </div>
+                    </div>
+
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Dual Input Dashboard: Left Card AI Reader / Right Card Clipboard Paste -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            
+            <!-- AI Screenshot OCR Reader Card -->
+            <div class="bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800/80 rounded-xl shadow-sm overflow-hidden transition-colors duration-300 flex flex-col justify-between">
+                <div>
+                    <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 flex justify-between items-center">
+                        <h2 class="font-bold text-sm text-slate-900 dark:text-slate-200 flex items-center gap-2">
+                            <i class="fa-solid fa-camera text-indigo-500"></i> Upload Screenshot Reader
+                        </h2>
+                        <span class="text-[10px] text-indigo-650 dark:text-indigo-400 bg-indigo-500/10 px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider">Gemini Vision AI</span>
+                    </div>
+                    <div class="p-5 space-y-3">
+                        <p class="text-xs text-slate-550 dark:text-slate-400 leading-relaxed">
+                            Upload or drag a screenshot of your Record. The built-in AI will analyze and populate your sessions, dates, and calculated totals in the table below.
+                        </p>
+                    </div>
+                </div>
+                
+                <div class="px-5 pb-5">
+                    <div id="upload-zone" class="border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl p-5 text-center hover:border-indigo-500 dark:hover:border-indigo-400 transition-all cursor-pointer relative group flex flex-col items-center justify-center min-h-[140px] bg-slate-50/30 dark:bg-slate-900/10">
+                        <input type="file" id="screenshot-file" accept="image/*" class="absolute inset-0 opacity-0 cursor-pointer" onchange="processUploadedImage(this)">
+                        
+                        <!-- Static Waiting State -->
+                        <div id="upload-static-state" class="space-y-2 flex flex-col items-center">
+                            <i class="fa-solid fa-cloud-arrow-up text-3xl text-indigo-500 group-hover:scale-110 transition-transform"></i>
+                            <p class="text-xs font-bold text-slate-800 dark:text-slate-200">Drag your screenshot here or click to browse</p>
+                            <p class="text-[9px] text-slate-500 dark:text-slate-400">Supports PNG, JPG, JPEG, WebP</p>
+                        </div>
+
+                        <!-- Processing State -->
+                        <div id="upload-loading-state" class="hidden space-y-3 flex flex-col items-center">
+                            <div class="relative flex items-center justify-center">
+                                <div class="animate-spin rounded-full h-10 w-10 border-4 border-slate-150 border-t-indigo-500"></div>
+                                <i class="fa-solid fa-microchip text-xs text-indigo-500 absolute animate-pulse"></i>
+                            </div>
+                            <p class="text-xs font-bold text-indigo-600 dark:text-indigo-400">Reading work logs...</p>
+                            <p class="text-[9px] text-slate-500 dark:text-slate-400" id="upload-progress-subtext">Converting Image Data</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Raw Check-In Clipboard Text Area -->
+            <div class="bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800/80 rounded-xl shadow-sm overflow-hidden transition-colors duration-300 flex flex-col justify-between">
+                <div>
+                    <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 flex justify-between items-center">
+                        <h2 class="font-bold text-sm text-slate-900 dark:text-slate-200 flex items-center gap-2">
+                            <i class="fa-solid fa-paste text-indigo-500"></i> Raw System Paste Input
+                        </h2>
+                        <span class="text-[10px] text-indigo-650 dark:text-indigo-400 bg-indigo-500/10 px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider">Portal Text Parser</span>
+                    </div>
+                    <div class="p-5 space-y-3">
+                        <p class="text-xs text-slate-550 dark:text-slate-400 leading-relaxed">
+                            Alternatively, select the text rows inside your portal page grid, copy them, and paste them below to process your session times manually.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="px-5 pb-5">
+                    <div class="relative">
+                        <textarea id="paste-input" rows="3" 
+                            placeholder="Paste check-in/out text data here...&#10;01/06 MON  9:27  12:00  14:19  17:50  0.00  6.07  1.18&#10;02/06 TUE  9:17  12:01  14:04  18:00  0.00  6.67  0.58" 
+                            class="w-full bg-slate-50 dark:bg-slate-900 text-slate-850 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-650 border border-slate-200 dark:border-slate-800 rounded-lg p-3 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all"></textarea>
+                        <button onclick="handlePasteAction()" class="absolute right-3 bottom-3 bg-indigo-600 hover:bg-indigo-500 text-white px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-md shadow-indigo-600/15 active:scale-95 transition-all">
+                            <i class="fa-solid fa-wand-magic-sparkles"></i> Parse Text
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Interactive Time Record Table (with Scroll Safety & Explicit Width to prevent Truncation) -->
+        <div class="bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800/80 rounded-xl shadow-sm overflow-hidden transition-colors duration-300">
+            <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                <div class="flex items-center gap-2">
+                    <h2 class="font-bold text-sm text-slate-900 dark:text-slate-200 flex items-center gap-2">
+                        <i class="fa-solid fa-table text-indigo-500"></i> Weekly Records & Timecards
+                    </h2>
+                    <!-- Horizontal Scroll Pulsing Warning for Narrow Views -->
+                    <span class="inline-flex items-center gap-1 text-[10px] bg-indigo-50 dark:bg-indigo-950/60 text-indigo-650 dark:text-indigo-400 px-2 py-0.5 rounded-full font-bold uppercase animate-pulse sm:hidden">
+                        <i class="fa-solid fa-arrows-left-right"></i> Scroll right for full numbers
+                    </span>
+                </div>
+                <button onclick="resetToInitial()" class="text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-white text-xs flex items-center gap-1 transition-colors">
+                    <i class="fa-solid fa-arrows-rotate"></i> Reset Week
+                </button>
+            </div>
+            
+            <!-- Table wrapper with forced horizontal scrolling to prevent squishing values on narrow screen resolutions -->
+            <div class="overflow-x-auto w-full">
+                <!-- Strict min-width container ensuring the final "Balance" and "Worked" numbers always display full decimal places -->
+                <table class="w-full min-w-[940px] text-left text-xs text-slate-650 dark:text-slate-300 table-fixed">
+                    <colgroup>
+                        <col class="w-[100px]"> <!-- Day column -->
+                        <col class="w-[120px]"> <!-- Session 1 In -->
+                        <col class="w-[120px]"> <!-- Session 1 Out -->
+                        <col class="w-[120px]"> <!-- Session 2 In -->
+                        <col class="w-[120px]"> <!-- Session 2 Out -->
+                        <col class="w-[90px]">  <!-- Required column -->
+                        <col class="w-[90px]">  <!-- Worked column -->
+                        <col class="w-[100px]"> <!-- Balance column -->
+                        <col class="w-[110px]"> <!-- Actions column -->
+                    </colgroup>
+                    <thead class="bg-slate-100/80 dark:bg-slate-900 text-slate-550 dark:text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
+                        <tr>
+                            <th class="py-3 px-3">Day</th>
+                            <th class="py-3 px-2 text-center" colspan="2">Session 1</th>
+                            <th class="py-3 px-2 text-center" colspan="2">Session 2</th>
+                            <th class="py-3 px-3 text-right">Required</th>
+                            <th class="py-3 px-3 text-right">Worked</th>
+                            <th class="py-3 px-3 text-right text-indigo-600 dark:text-indigo-400 font-extrabold whitespace-nowrap">Balance (0.00)</th>
+                            <th class="py-3 px-3 text-center">Action</th>
+                        </tr>
+                        <tr class="bg-slate-50 dark:bg-slate-900/40 border-b border-slate-200 dark:border-slate-800 text-[9px] text-slate-450 dark:text-slate-500">
+                            <th></th>
+                            <th class="text-center border-r border-slate-200/50 dark:border-slate-800/40 py-1">In</th>
+                            <th class="text-center border-r border-slate-200/50 dark:border-slate-800/40 py-1">Out</th>
+                            <th class="text-center border-r border-slate-200/50 dark:border-slate-800/40 py-1">In</th>
+                            <th class="text-center py-1">Out</th>
+                            <th></th>
+                            <th></th>
+                            <th class="text-right px-3 text-[8.5px] text-indigo-500/80 font-bold">Untruncated</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-body" class="divide-y divide-slate-200/60 dark:divide-slate-800/60 font-medium">
+                        <!-- Generated Dynamically -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Collapsible Configuration Area -->
+        <div class="bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800/80 rounded-xl shadow-sm overflow-hidden transition-colors duration-300">
+            <button onclick="toggleSettings()" class="w-full px-5 py-4 flex justify-between items-center hover:bg-slate-50/50 dark:hover:bg-slate-900/20 transition-colors focus:outline-none">
+                <span class="font-bold text-sm text-slate-900 dark:text-slate-200 flex items-center gap-2">
+                    <i class="fa-solid fa-sliders text-indigo-500"></i> System Threshold Settings
+                </span>
+                <i id="settings-chevron" class="fa-solid fa-chevron-down text-xs text-slate-400 transition-transform"></i>
+            </button>
+            
+            <div id="settings-panel" class="hidden px-5 pb-5 border-t border-slate-200 dark:border-slate-800/50 space-y-4 pt-4">
+                <p class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                    Alter system requirement values to configure custom contract requirements or non-standard work policies.
+                </p>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div>
+                        <label class="block text-[10px] text-slate-500 dark:text-slate-450 uppercase font-bold">Mon-Thu Required</label>
+                        <div class="flex items-center gap-2 mt-1">
+                            <input type="number" id="cfg-req-mon-thu" step="0.05" value="7.25" onchange="updateSettings()" class="w-full bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-800 rounded p-1.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                            <span class="text-xs text-slate-550 dark:text-slate-400 shrink-0 font-medium">hrs</span>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] text-slate-500 dark:text-slate-450 uppercase font-bold">Friday Required</label>
+                        <div class="flex items-center gap-2 mt-1">
+                            <input type="number" id="cfg-req-fri" step="0.05" value="7.00" onchange="updateSettings()" class="w-full bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-800 rounded p-1.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                            <span class="text-xs text-slate-550 dark:text-slate-400 shrink-0 font-medium">hrs</span>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] text-slate-500 dark:text-slate-450 uppercase font-bold">Weekend Required</label>
+                        <div class="flex items-center gap-2 mt-1">
+                            <input type="number" id="cfg-req-weekend" step="0.05" value="0.00" onchange="updateSettings()" class="w-full bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-800 rounded p-1.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                            <span class="text-xs text-slate-550 dark:text-slate-400 shrink-0 font-medium">hrs</span>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] text-slate-500 dark:text-slate-450 uppercase font-bold">Standard Lunch Limit</label>
+                        <div class="flex items-center gap-2 mt-1">
+                            <input type="number" id="cfg-lunch" step="0.1" value="2.0" onchange="updateSettings()" class="w-full bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-800 rounded p-1.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                            <span class="text-xs text-slate-550 dark:text-slate-400 shrink-0 font-medium">hrs</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Footer of Page -->
+    <footer class="border-t border-slate-200 dark:border-slate-800 mt-12 py-6 bg-white dark:bg-slate-950 text-slate-500 dark:text-slate-400 text-xs transition-colors duration-300">
+        <div class="max-w-7xl mx-auto px-4 flex flex-col md:flex-row justify-between items-center gap-4">
+            <p>Designed for Check-in/out balancing & target optimization.</p>
+            <p>Layout optimized with anti-compression guards &bull; Double precision accuracy &bull; Gemini OCR Engine</p>
+        </div>
+    </footer>
+
+    <script>
+        // Configuration Parameters
+        let config = {
+            reqMonThu: 7.25,  // 7 hours 15 mins
+            reqFri: 7.00,     // 7 hours
+            reqWeekend: 0.00,
+            standardLunch: 2.0 // standard break duration in hours
+        };
+
+        // Static or custom calculated list of rows
+        let daysData = [
+            { date: "31/05", dayName: "SUN", s1In: "", s1Out: "", s2In: "", s2Out: "", adjust: 0, worked: 0, balance: 0, isOff: true, label: "W" },
+            { date: "01/06", dayName: "MON", s1In: "09:27", s1Out: "12:00", s2In: "14:19", s2Out: "17:50", adjust: 0, worked: 6.07, balance: 1.18, isOff: false, label: "" },
+            { date: "02/06", dayName: "TUE", s1In: "09:17", s1Out: "12:01", s2In: "14:04", s2Out: "18:00", adjust: 0, worked: 6.67, balance: 0.58, isOff: false, label: "" },
+            { date: "03/06", dayName: "WED", s1In: "", s1Out: "", s2In: "", s2Out: "", adjust: 0, worked: 0, balance: 7.25, isOff: false, label: "" },
+            { date: "04/06", dayName: "THU", s1In: "", s1Out: "", s2In: "", s2Out: "", adjust: 0, worked: 0, balance: 7.25, isOff: false, label: "" },
+            { date: "05/06", dayName: "FRI", s1In: "", s1Out: "", s2In: "", s2Out: "", adjust: 0, worked: 0, balance: 7.00, isOff: false, label: "" },
+            { date: "06/06", dayName: "SAT", s1In: "", s1Out: "", s2In: "", s2Out: "", adjust: 0, worked: 0, balance: 0, isOff: true, label: "W" }
+        ];
+
+        // Active highlighted day (defaults to Tuesday 02/06 to represent tracking state)
+        let selectedDayIndex = 2; 
+        let useRealtime = true;
+        let alarmEnabled = false;
+        
+        let lastStdChimeTriggered = false;
+        let lastCumChimeTriggered = false;
+
+        window.onload = function() {
+            // Apply initial calculations
+            calculateWorkedTimes();
+            renderTable();
+            updateDashboardStats();
+            updateOptimizer();
+            
+            // Set up our main operational interval (every 1 second)
+            setInterval(gameLoop, 1000);
+            
+            showToast("Application loaded with full number decimal formatting!", "success");
+        };
+
+        // Helper to convert time string (HH:MM) to total minutes from midnight
+        function timeToMinutes(timeStr) {
+            if (!timeStr || !timeStr.includes(':')) return null;
+            const parts = timeStr.trim().split(':');
+            if (parts.length < 2) return null;
+            const h = parseInt(parts[0], 10);
+            const m = parseInt(parts[1], 10);
+            if (isNaN(h) || isNaN(m)) return null;
+            return h * 60 + m;
+        }
+
+        // Helper to convert minutes from midnight to HH:MM format
+        function minutesToTime(totalMin) {
+            if (totalMin === null || totalMin < 0) return "--:--";
+            totalMin = Math.round(totalMin);
+            const h = Math.floor(totalMin / 60) % 24;
+            const m = totalMin % 60;
+            return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+        }
+
+        // Helper to convert raw minutes to visual decimal hours (e.g., 364 mins -> 6.07 hrs)
+        function minutesToDecimalHours(mins) {
+            return parseFloat((mins / 60).toFixed(2));
+        }
+
+        // Helper to get daily standard requirement based on day of week
+        function getRequiredHoursForDay(dayName) {
+            if (dayName === 'FRI') return config.reqFri;
+            if (dayName === 'SAT' || dayName === 'SUN') return config.reqWeekend;
+            return config.reqMonThu;
+        }
+
+        // Core continuous loop for real-time timer calculations
+        function gameLoop() {
+            if (useRealtime) {
+                const now = new Date();
+                const hh = String(now.getHours()).padStart(2, '0');
+                const mm = String(now.getMinutes()).padStart(2, '0');
+                document.getElementById('sim-time').value = `${hh}:${mm}`;
+            }
+            updateOptimizer();
+        }
+
+        function calculateWorkedTimes() {
+            daysData.forEach((day, index) => {
+                let requiredHours = getRequiredHoursForDay(day.dayName);
+                
+                // If marked off/leave and no times set, required is 0
+                if (day.isOff && !day.s1In && !day.s2In) {
+                    requiredHours = 0;
+                }
+
+                let workedMins = 0;
+
+                // Session 1 Calculations
+                const s1InMin = timeToMinutes(day.s1In);
+                const s1OutMin = timeToMinutes(day.s1Out);
+                if (s1InMin !== null && s1OutMin !== null) {
+                    workedMins += Math.max(0, s1OutMin - s1InMin);
+                }
+
+                // Session 2 Calculations
+                const s2InMin = timeToMinutes(day.s2In);
+                const s2OutMin = timeToMinutes(day.s2Out);
+                if (s2InMin !== null && s2OutMin !== null) {
+                    workedMins += Math.max(0, s2OutMin - s2InMin);
+                }
+
+                // Convert worked time to decimal format
+                const computedWorked = minutesToDecimalHours(workedMins);
+                
+                if (day.s2In && !day.s2Out && index === selectedDayIndex) {
+                    // This is our active partial day, calculate dynamically up to current checkout
+                    day.worked = computedWorked; 
+                } else if (!day.s1In && !day.s2In) {
+                    day.worked = 0;
+                } else {
+                    day.worked = computedWorked;
+                }
+
+                // Calculate local balance for this day
+                const computedBalance = parseFloat((requiredHours - day.worked).toFixed(2));
+                day.balance = computedBalance < 0 ? 0 : computedBalance;
+            });
+        }
+
+        function updateDashboardStats() {
+            let totalRequired = 0;
+            let totalWorked = 0;
+            let totalDeficit = 0;
+
+            daysData.forEach((day) => {
+                const req = getRequiredHoursForDay(day.dayName);
+                totalRequired += req;
+                totalWorked += day.worked;
+                
+                // Deficits represent missed hours from past days in the week
+                if (day.balance > 0 && (day.s1Out || day.s2Out)) {
+                    totalDeficit += day.balance;
+                }
+            });
+
+            const totalRemaining = parseFloat((totalRequired - totalWorked).toFixed(2));
+            const positiveRemaining = totalRemaining < 0 ? 0 : totalRemaining;
+
+            // Render stats in high precision format (always 2 decimals)
+            document.getElementById('stat-required').innerText = totalRequired.toFixed(2);
+            document.getElementById('stat-worked').innerText = totalWorked.toFixed(2);
+            document.getElementById('stat-balance').innerText = positiveRemaining.toFixed(2);
+            document.getElementById('stat-deficit').innerText = totalDeficit.toFixed(2);
+
+            // Update Progress Bar visuals
+            const workedPercent = Math.min(100, (totalWorked / totalRequired) * 100);
+            const remainingPercent = Math.min(100, (positiveRemaining / totalRequired) * 100);
+
+            document.getElementById('bar-worked').style.width = `${workedPercent}%`;
+            document.getElementById('bar-balance').style.width = `${remainingPercent}%`;
+        }
+
+        /* Helper to convert file input to Base64 async */
+        function fileToBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = error => reject(error);
+            });
+        }
+
+        /* Toggle display states for local reading */
+        function setUploadLoadingState(isLoading, subtext = "") {
+            const staticState = document.getElementById('upload-static-state');
+            const loadingState = document.getElementById('upload-loading-state');
+            const subtextEl = document.getElementById('upload-progress-subtext');
+            const uploadZone = document.getElementById('upload-zone');
+
+            if (isLoading) {
+                staticState.classList.add('hidden');
+                loadingState.classList.remove('hidden');
+                if (subtextEl) subtextEl.innerText = subtext;
+                uploadZone.classList.add('border-indigo-500', 'bg-indigo-50/10', 'pointer-events-none');
+            } else {
+                staticState.classList.remove('hidden');
+                loadingState.classList.add('hidden');
+                uploadZone.classList.remove('border-indigo-500', 'bg-indigo-50/10', 'pointer-events-none');
+            }
+        }
+
+        /* Call Gemini Vision Model to run OCR Table Parsing */
+        async function processUploadedImage(input) {
+            if (!input.files || input.files.length === 0) return;
+            const file = input.files[0];
+            
+            setUploadLoadingState(true, "Converting Image Data...");
+
+            try {
+                const base64DataWithHeader = await fileToBase64(file);
+                const base64Data = base64DataWithHeader.split(',')[1];
+                const mimeType = file.type;
+
+                setUploadLoadingState(true, "Calling Gemini Vision OCR...");
+                
+                const prompt = `You are a professional administrative assistant. Analyze this screenshot of a portal work record or timesheet check-in table. 
+For each day in the weekly table, extract the log values. Convert hours and sessions exactly. 
+Return a strictly formatted JSON array containing objects matching this schema structure:
+[
+  {
+    "date": "DD/MM" (e.g. "01/06"),
+    "dayName": "MON" or "TUE" or "WED" or "THU" or "FRI" or "SAT" or "SUN",
+    "s1In": "HH:MM" (format to 24h, or "" if blank),
+    "s1Out": "HH:MM" (format to 24h, or "" if blank),
+    "s2In": "HH:MM" (format to 24h, or "" if blank),
+    "s2Out": "HH:MM" (format to 24h, or "" if blank),
+    "isOff": true or false (true if marked holiday, "W", day off, or empty weekend, false otherwise)
+  }
+]
+Extract dates properly. Do not write any conversational summary or text around the JSON array. Output absolute raw JSON only.`;
+
+                const systemPrompt = "You are a microservice. You only output valid JSON matching the requested schema. No conversational chatter.";
+
+                const payload = {
+                    contents: [
+                        {
+                            role: "user",
+                            parts: [
+                                { text: prompt },
+                                {
+                                    inlineData: {
+                                        mimeType: mimeType,
+                                        data: base64Data
+                                    }
+                                }
+                            ]
+                        }
+                    ],
+                    systemInstruction: {
+                        parts: [{ text: systemPrompt }]
+                    },
+                    generationConfig: {
+                        responseMimeType: "application/json",
+                        responseSchema: {
+                            type: "ARRAY",
+                            items: {
+                                type: "OBJECT",
+                                properties: {
+                                    "date": { "type": "STRING" },
+                                    "dayName": { "type": "STRING" },
+                                    "s1In": { "type": "STRING" },
+                                    "s1Out": { "type": "STRING" },
+                                    "s2In": { "type": "STRING" },
+                                    "s2Out": { "type": "STRING" },
+                                    "isOff": { "type": "BOOLEAN" }
+                                },
+                                "required": ["date", "dayName", "s1In", "s1Out", "s2In", "s2Out", "isOff"]
+                            }
+                        }
+                    }
+                };
+
+                const apiKey = ""; // Relies on Canvas system runtime environment injection
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+
+                const response = await fetch(apiUrl, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Vision pipeline returned status ${response.status}`);
+                }
+
+                const result = await response.json();
+                const textResponse = result.candidates?.[0]?.content?.parts?.[0]?.text;
+
+                if (!textResponse) {
+                    throw new Error("Empty reading from Gemini Model");
+                }
+
+                const parsedDays = JSON.parse(textResponse);
+                if (Array.isArray(parsedDays) && parsedDays.length > 0) {
+                    parsedDays.forEach(parsedDay => {
+                        // Find matching index in local daysData array by matching Date or Day
+                        const matchIdx = daysData.findIndex(d => d.date === parsedDay.date || d.dayName === parsedDay.dayName?.toUpperCase());
+                        if (matchIdx !== -1) {
+                            daysData[matchIdx] = {
+                                ...daysData[matchIdx],
+                                s1In: parsedDay.s1In || "",
+                                s1Out: parsedDay.s1Out || "",
+                                s2In: parsedDay.s2In || "",
+                                s2Out: parsedDay.s2Out || "",
+                                isOff: !!parsedDay.isOff
+                            };
+                        }
+                    });
+
+                    // Auto-align tracking focal index to first day that's active/partially punched
+                    const firstActiveIdx = daysData.findIndex(d => d.s1In && !d.s2Out && !d.isOff);
+                    if (firstActiveIdx !== -1) {
+                        selectedDayIndex = firstActiveIdx;
+                    }
+
+                    calculateWorkedTimes();
+                    renderTable();
+                    updateDashboardStats();
+                    updateOptimizer();
+
+                    showToast(`Successfully extracted and parsed scheduling details!`, "success");
+                } else {
+                    throw new Error("Structure did not parse cleanly");
+                }
+
+            } catch (error) {
+                console.error("AI Reader Failure:", error);
+                showToast("Visual analysis failed. Please try copying the raw text instead.", "error");
+            } finally {
+                setUploadLoadingState(false);
+                input.value = ""; // Empty file field
+            }
+        }
+
+        function updateOptimizer() {
+            const day = daysData[selectedDayIndex];
+            if (!day) return;
+
+            document.getElementById('selected-day-label').innerText = `${getDayFullLabel(day.dayName)} ${day.date}`;
+
+            // Check if day is marked off
+            if (day.isOff && !day.s1In && !day.s2In) {
+                document.getElementById('active-badge').innerText = "Day Off";
+                document.getElementById('active-badge').className = "px-2.5 py-0.5 text-[10px] bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-450 rounded-full border border-slate-300 dark:border-slate-700 font-bold";
+                
+                document.getElementById('std-countdown').innerText = "00:00:00";
+                document.getElementById('cum-countdown').innerText = "00:00:00";
+                document.getElementById('std-context').innerText = "No Shift Scheduled.";
+                document.getElementById('cum-context').innerText = "No Shift Scheduled.";
+                return;
+            } else {
+                document.getElementById('active-badge').innerText = "Active Today";
+                document.getElementById('active-badge').className = "px-2.5 py-0.5 text-[10px] bg-emerald-100 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 rounded-full border border-emerald-300 dark:border-emerald-500/20 font-bold animate-pulse";
+            }
+
+            // Standard target for today
+            const standardRequiredToday = getRequiredHoursForDay(day.dayName);
+            
+            // Custom Goal offset modifier (overtime adjustment)
+            const customGoalInput = parseFloat(document.getElementById('custom-goal-input').value) || 0;
+            
+            const targetWorkedHoursToday = standardRequiredToday + customGoalInput;
+
+            // Find simulated / current time
+            const simTimeVal = document.getElementById('sim-time').value;
+            const currentTimeMin = timeToMinutes(simTimeVal) || 0;
+
+            // Calculate Session 1 worked minutes
+            let s1WorkedMins = 0;
+            const s1InMin = timeToMinutes(day.s1In);
+            const s1OutMin = timeToMinutes(day.s1Out);
+            if (s1InMin !== null && s1OutMin !== null) {
+                s1WorkedMins = Math.max(0, s1OutMin - s1InMin);
+            }
+
+            // Calculate session baselines
+            let s2InMin = timeToMinutes(day.s2In);
+            let activeSessionStart = null;
+            let currentWorkedMins = s1WorkedMins;
+
+            if (s2InMin !== null) {
+                activeSessionStart = s2InMin;
+                if (currentTimeMin > s2InMin) {
+                    currentWorkedMins += (currentTimeMin - s2InMin);
+                }
+            } else if (s1InMin !== null && s1OutMin === null) {
+                activeSessionStart = s1InMin;
+                if (currentTimeMin > s1InMin) {
+                    currentWorkedMins += (currentTimeMin - s1InMin);
+                }
+            }
+
+            // Cumulative weekly deficit before today
+            let weeklyDeficitMins = 0;
+            daysData.forEach((d, idx) => {
+                if (idx < selectedDayIndex) {
+                    const dReq = getRequiredHoursForDay(d.dayName);
+                    const dDeficit = dReq - d.worked;
+                    if (dDeficit > 0) {
+                        weeklyDeficitMins += (dDeficit * 60);
+                    }
+                }
+            });
+
+            // Set up labels for goals
+            document.getElementById('lbl-goal-standard').innerText = `Goal: ${targetWorkedHoursToday.toFixed(2)} hrs`;
+            document.getElementById('lbl-goal-cumulative').innerText = `Goal: ${(targetWorkedHoursToday + (weeklyDeficitMins/60)).toFixed(2)} hrs`;
+
+            // 1. SOLVE TARGET 1: TODAY'S STANDARD exit
+            let targetLeavingMinStd = null;
+            let totalMinsNeededStd = targetWorkedHoursToday * 60;
+            
+            if (activeSessionStart !== null) {
+                const remainingMinsNeededStd = totalMinsNeededStd - s1WorkedMins;
+                if (day.s2In) {
+                    targetLeavingMinStd = s2InMin + remainingMinsNeededStd;
+                } else {
+                    targetLeavingMinStd = s1InMin + (config.standardLunch * 60) + totalMinsNeededStd;
+                }
+            }
+
+            // 2. SOLVE TARGET 2: WEEK CUMULATIVE CATCH-UP exit
+            let targetLeavingMinCum = null;
+            let totalMinsNeededCum = (targetWorkedHoursToday * 60) + weeklyDeficitMins;
+            
+            if (activeSessionStart !== null) {
+                const remainingMinsNeededCum = totalMinsNeededCum - s1WorkedMins;
+                if (day.s2In) {
+                    targetLeavingMinCum = s2InMin + remainingMinsNeededCum;
+                } else {
+                    targetLeavingMinCum = s1InMin + (config.standardLunch * 60) + totalMinsNeededCum;
+                }
+            }
+
+            // RENDER TARGET 1 (Standard) Timer Views
+            document.getElementById('std-leave-time').innerText = minutesToTime(targetLeavingMinStd);
+            document.getElementById('std-lbl-in').innerText = `In: ${day.s2In || day.s1In || '--:--'}`;
+            if (targetLeavingMinStd !== null) {
+                const remainingMinStd = targetLeavingMinStd - currentTimeMin;
+                const progressStd = Math.min(100, Math.max(0, (currentWorkedMins / totalMinsNeededStd) * 100));
+                
+                document.getElementById('std-progress-bar').style.width = `${progressStd}%`;
+                document.getElementById('std-lbl-progress').innerText = `${progressStd.toFixed(1)}% Completed`;
+
+                if (remainingMinStd > 0) {
+                    const hoursLeft = Math.floor(remainingMinStd / 60);
+                    const minsLeft = Math.floor(remainingMinStd % 60);
+                    const secsLeft = 59 - (new Date().getSeconds());
+                    document.getElementById('std-countdown').innerText = `${String(hoursLeft).padStart(2, '0')}:${String(minsLeft).padStart(2, '0')}:${String(secsLeft).padStart(2, '0')}`;
+                    document.getElementById('std-countdown').className = "text-4xl font-mono font-black text-slate-850 dark:text-slate-100 tracking-wider my-1";
+                    document.getElementById('std-context').innerHTML = `Remaining until Daily 0-Balance`;
+                } else {
+                    document.getElementById('std-countdown').innerText = "COMPLETED";
+                    document.getElementById('std-countdown').className = "text-3xl font-mono font-extrabold text-emerald-600 dark:text-emerald-400 tracking-wider my-1 animate-pulse";
+                    document.getElementById('std-context').innerHTML = `<span class="text-emerald-600 dark:text-emerald-400 font-bold"><i class="fa-solid fa-circle-check"></i> Standard Hours met!</span>`;
+                    triggerStandardChime();
+                }
+            } else {
+                document.getElementById('std-countdown').innerText = "--:--:--";
+                document.getElementById('std-context').innerText = "Incomplete check-in variables";
+            }
+
+            // RENDER TARGET 2 (Weekly Cumulative) Timer Views
+            document.getElementById('cum-leave-time').innerText = minutesToTime(targetLeavingMinCum);
+            document.getElementById('cum-lbl-in').innerText = `In: ${day.s2In || day.s1In || '--:--'}`;
+            if (targetLeavingMinCum !== null) {
+                const remainingMinCum = targetLeavingMinCum - currentTimeMin;
+                const progressCum = Math.min(100, Math.max(0, (currentWorkedMins / totalMinsNeededCum) * 100));
+                
+                document.getElementById('cum-progress-bar').style.width = `${progressCum}%`;
+                document.getElementById('cum-lbl-progress').innerText = `${progressCum.toFixed(1)}% Completed`;
+
+                if (remainingMinCum > 0) {
+                    const hoursLeft = Math.floor(remainingMinCum / 60);
+                    const minsLeft = Math.floor(remainingMinCum % 60);
+                    const secsLeft = 59 - (new Date().getSeconds());
+                    document.getElementById('cum-countdown').innerText = `${String(hoursLeft).padStart(2, '0')}:${String(minsLeft).padStart(2, '0')}:${String(secsLeft).padStart(2, '0')}`;
+                    document.getElementById('cum-countdown').className = "text-4xl font-mono font-black text-slate-850 dark:text-slate-100 tracking-wider my-1";
+                    document.getElementById('cum-context').innerHTML = `Remaining until Deficits Paid Off`;
+                } else {
+                    document.getElementById('cum-countdown').innerText = "COMPLETED";
+                    document.getElementById('cum-countdown').className = "text-3xl font-mono font-extrabold text-violet-600 dark:text-violet-400 tracking-wider my-1 animate-pulse";
+                    document.getElementById('cum-context').innerHTML = `<span class="text-violet-600 dark:text-violet-400 font-bold"><i class="fa-solid fa-circle-check"></i> Week is paid back!</span>`;
+                    triggerCumulativeChime();
+                }
+            } else {
+                document.getElementById('cum-countdown').innerText = "--:--:--";
+                document.getElementById('cum-context').innerText = "Incomplete check-in variables";
+            }
+        }
+
+        function triggerStandardChime() {
+            if (!alarmEnabled || lastStdChimeTriggered) return;
+            lastStdChimeTriggered = true;
+            showToast("Standard Daily Target met!", "success");
+            playNotificationSequence(false);
+        }
+
+        function triggerCumulativeChime() {
+            if (!alarmEnabled || lastCumChimeTriggered) return;
+            lastCumChimeTriggered = true;
+            showToast("Weekly Catch-up Target met! Week clean.", "success");
+            playNotificationSequence(true);
+        }
+
+        function playNotificationSequence(isCumulative) {
+            try {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                const ctx = new AudioContext();
+                if (isCumulative) {
+                    playBeep(ctx, 523.25, 0.1, 0);       // C5
+                    playBeep(ctx, 659.25, 0.1, 0.15);    // E5
+                    playBeep(ctx, 783.99, 0.3, 0.3);     // G5
+                } else {
+                    playBeep(ctx, 587.33, 0.1, 0);       // D5
+                    playBeep(ctx, 698.46, 0.25, 0.15);    // F5
+                }
+            } catch(e) {
+                console.error("Audio Context initialization failed: ", e);
+            }
+        }
+
+        function playBeep(ctx, freq, duration, delay) {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.value = freq;
+            gain.gain.setValueAtTime(0, ctx.currentTime + delay);
+            gain.gain.linearRampToValueAtTime(0.35, ctx.currentTime + delay + 0.04);
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + delay + duration);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(ctx.currentTime + delay);
+            osc.stop(ctx.currentTime + delay + duration);
+        }
+
+        function toggleAudio() {
+            alarmEnabled = !alarmEnabled;
+            const btn = document.getElementById('btn-audio');
+            if (alarmEnabled) {
+                btn.innerHTML = `<i class="fa-solid fa-bell text-emerald-500"></i> Enabled`;
+                btn.className = "px-3 py-1.5 bg-emerald-50 dark:bg-emerald-500/10 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 text-emerald-750 dark:text-emerald-300 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-all border border-emerald-300 dark:border-emerald-500/30";
+                showToast("Audio reminders enabled", "success");
+                
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if(AudioContext) {
+                    const ctx = new AudioContext();
+                    playBeep(ctx, 880, 0.15, 0);
+                }
+            } else {
+                btn.innerHTML = `<i class="fa-solid fa-bell-slash text-slate-400"></i> Disabled`;
+                btn.className = "px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-650 dark:text-slate-300 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-all border border-slate-200 dark:border-transparent";
+                showToast("Audio reminders muted", "info");
+            }
+        }
+
+        function toggleRealtime() {
+            useRealtime = document.getElementById('use-realtime').checked;
+            document.getElementById('sim-time').disabled = useRealtime;
+            showToast(useRealtime ? "Synchronized with active local clock" : "Manual clock simulation activated", "info");
+            triggerRecalculate();
+        }
+
+        function handlePasteAction() {
+            const pastedText = document.getElementById('paste-input').value;
+            if (!pastedText.trim()) {
+                showToast("Please paste some checkout system records first!", "error");
+                return;
+            }
+
+            const parsed = parseRawCheckoutSystem(pastedText);
+            if (parsed && parsed.length > 0) {
+                parsed.forEach(parsedDay => {
+                    const matchIdx = daysData.findIndex(d => d.date === parsedDay.date);
+                    if (matchIdx !== -1) {
+                        daysData[matchIdx] = { ...daysData[matchIdx], ...parsedDay };
+                    }
+                });
+
+                const firstActiveIdx = daysData.findIndex(d => d.s1In && !d.s2Out && !d.isOff);
+                if (firstActiveIdx !== -1) {
+                    selectedDayIndex = firstActiveIdx;
+                }
+
+                calculateWorkedTimes();
+                renderTable();
+                updateDashboardStats();
+                updateOptimizer();
+                
+                showToast(`Successfully parsed and loaded ${parsed.length} days of check-in records!`, "success");
+            } else {
+                showToast("Could not recognize data format.", "error");
+            }
+        }
+
+        function parseRawCheckoutSystem(text) {
+            const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+            const list = [];
+
+            lines.forEach(line => {
+                const dateMatch = line.match(/(\d{2}\/\d{2})/);
+                if (!dateMatch) return;
+
+                const dateStr = dateMatch[1];
+                let parts = line.split(/\t+/);
+                if (parts.length <= 1) {
+                    parts = line.split(/\s{2,}/);
+                }
+                if (parts.length <= 1) {
+                    parts = line.split(/\s+/);
+                }
+                parts = parts.map(p => p.trim()).filter(p => p.length > 0);
+
+                const dateIdx = parts.findIndex(p => p.includes(dateStr));
+                if (dateIdx === -1) return;
+
+                const dayParts = parts.slice(dateIdx);
+
+                let dayName = "";
+                let timeTokens = [];
+                if (dayParts[1] && /^(SUN|MON|TUE|WED|THU|FRI|SAT)$/i.test(dayParts[1])) {
+                    dayName = dayParts[1].toUpperCase();
+                    timeTokens = dayParts.slice(2);
+                } else {
+                    timeTokens = dayParts.slice(1);
+                }
+
+                const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+                const placeholderRegex = /^[:\-]$/;
+                const decimalRegex = /^-?\d+\.\d+$/;
+
+                let s1In = "", s1Out = "", s2In = "", s2Out = "";
+                let isOff = (dayName === 'SAT' || dayName === 'SUN');
+                let foundTimes = [];
+                let i = 0;
+
+                while (i < timeTokens.length && foundTimes.length < 4) {
+                    const token = timeTokens[i];
+                    if (timeRegex.test(token)) {
+                        foundTimes.push(token);
+                    } else if (placeholderRegex.test(token)) {
+                        foundTimes.push(""); 
+                    } else if (token === "W" || token === "Off") {
+                        isOff = true;
+                    } else if (decimalRegex.test(token)) {
+                        break;
+                    }
+                    i++;
+                }
+
+                s1In = foundTimes[0] || "";
+                s1Out = foundTimes[1] || "";
+                s2In = foundTimes[2] || "";
+                s2Out = foundTimes[3] || "";
+
+                list.push({
+                    date: dateStr,
+                    dayName: dayName,
+                    s1In,
+                    s1Out,
+                    s2In,
+                    s2Out,
+                    isOff
+                });
+            });
+
+            return list;
+        }
+
+        function selectActiveRow(index) {
+            selectedDayIndex = index;
+            lastStdChimeTriggered = false;
+            lastCumChimeTriggered = false;
+            
+            renderTable();
+            updateOptimizer();
+            showToast(`Active target tracking shifted to ${getDayFullLabel(daysData[index].dayName)}`, "info");
+        }
+
+        function handleCellChange(index, field, value) {
+            daysData[index][field] = value.trim();
+            calculateWorkedTimes();
+            updateDashboardStats();
+            updateOptimizer();
+        }
+
+        function handleCheckboxChange(index, checked) {
+            daysData[index].isOff = checked;
+            calculateWorkedTimes();
+            updateDashboardStats();
+            updateOptimizer();
+            renderTable();
+        }
+
+        function triggerRecalculate() {
+            calculateWorkedTimes();
+            updateDashboardStats();
+            updateOptimizer();
+        }
+
+        function applyPreset(presetName) {
+            if (presetName === 'um') {
+                config.reqMonThu = 7.25;
+                config.reqFri = 7.00;
+                config.reqWeekend = 0.00;
+                document.getElementById('cfg-req-mon-thu').value = "7.25";
+                document.getElementById('cfg-req-fri').value = "7.00";
+                document.getElementById('cfg-req-weekend').value = "0.00";
+                showToast("Applied UM standard parameters", "success");
+            } else if (presetName === 'standard') {
+                config.reqMonThu = 8.00;
+                config.reqFri = 8.00;
+                config.reqWeekend = 0.00;
+                document.getElementById('cfg-req-mon-thu').value = "8.00";
+                document.getElementById('cfg-req-fri').value = "8.00";
+                document.getElementById('cfg-req-weekend').value = "0.00";
+                showToast("Applied Standard 40h standard parameters", "success");
+            }
+            triggerRecalculate();
+        }
+
+        function updateSettings() {
+            config.reqMonThu = parseFloat(document.getElementById('cfg-req-mon-thu').value) || 0;
+            config.reqFri = parseFloat(document.getElementById('cfg-req-fri').value) || 0;
+            config.reqWeekend = parseFloat(document.getElementById('cfg-req-weekend').value) || 0;
+            config.standardLunch = parseFloat(document.getElementById('cfg-lunch').value) || 2.0;
+            
+            showToast("Configurations modified successfully!", "success");
+            triggerRecalculate();
+        }
+
+        function toggleSettings() {
+            const panel = document.getElementById('settings-panel');
+            const chevron = document.getElementById('settings-chevron');
+            if (panel.classList.contains('hidden')) {
+                panel.classList.remove('hidden');
+                chevron.style.transform = "rotate(180deg)";
+            } else {
+                panel.classList.add('hidden');
+                chevron.style.transform = "rotate(0deg)";
+            }
+        }
+
+        function resetToInitial() {
+            daysData = [
+                { date: "31/05", dayName: "SUN", s1In: "", s1Out: "", s2In: "", s2Out: "", adjust: 0, worked: 0, balance: 0, isOff: true, label: "W" },
+                { date: "01/06", dayName: "MON", s1In: "", s1Out: "", s2In: "", s2Out: "", adjust: 0, worked: 0, balance: 0, isOff: false, label: "" },
+                { date: "02/06", dayName: "TUE", s1In: "", s1Out: "", s2In: "", s2Out: "", adjust: 0, worked: 0, balance: 0, isOff: false, label: "" },
+                { date: "03/06", dayName: "WED", s1In: "", s1Out: "", s2In: "", s2Out: "", adjust: 0, worked: 0, balance: 0, isOff: false, label: "" },
+                { date: "04/06", dayName: "THU", s1In: "", s1Out: "", s2In: "", s2Out: "", adjust: 0, worked: 0, balance: 0, isOff: false, label: "" },
+                { date: "05/06", dayName: "FRI", s1In: "", s1Out: "", s2In: "", s2Out: "", adjust: 0, worked: 0, balance: 0, isOff: false, label: "" },
+                { date: "06/06", dayName: "SAT", s1In: "", s1Out: "", s2In: "", s2Out: "", adjust: 0, worked: 0, balance: 0, isOff: true, label: "W" }
+            ];
+            selectedDayIndex = 2;
+            
+            triggerRecalculate();
+            renderTable();
+            showToast("Week records reset completely.", "info");
+        }
+
+        function loadDemoData() {
+            daysData = [
+                { date: "31/05", dayName: "SUN", s1In: "", s1Out: "", s2In: "", s2Out: "", adjust: 0, worked: 0, balance: 0, isOff: true, label: "W" },
+                { date: "01/06", dayName: "MON", s1In: "09:27", s1Out: "12:00", s2In: "14:19", s2Out: "17:50", adjust: 0, worked: 6.07, balance: 1.18, isOff: false, label: "" },
+                { date: "02/06", dayName: "TUE", s1In: "09:17", s1Out: "12:01", s2In: "14:04", s2Out: "18:00", adjust: 0, worked: 6.67, balance: 0.58, isOff: false, label: "" },
+                { date: "03/06", dayName: "WED", s1In: "", s1Out: "", s2In: "", s2Out: "", adjust: 0, worked: 0, balance: 7.25, isOff: false, label: "" },
+                { date: "04/06", dayName: "THU", s1In: "", s1Out: "", s2In: "", s2Out: "", adjust: 0, worked: 0, balance: 7.25, isOff: false, label: "" },
+                { date: "05/06", dayName: "FRI", s1In: "", s1Out: "", s2In: "", s2Out: "", adjust: 0, worked: 0, balance: 7.00, isOff: false, label: "" },
+                { date: "06/06", dayName: "SAT", s1In: "", s1Out: "", s2In: "", s2Out: "", adjust: 0, worked: 0, balance: 0, isOff: true, label: "W" }
+            ];
+            selectedDayIndex = 2;
+
+            triggerRecalculate();
+            renderTable();
+            showToast("Full-number sample records loaded!", "success");
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('table-body');
+            tbody.innerHTML = '';
+
+            daysData.forEach((day, index) => {
+                const isActive = (index === selectedDayIndex);
+                
+                const activeClass = isActive 
+                    ? 'bg-indigo-50/70 dark:bg-indigo-950/20 border-l-4 border-indigo-500 text-slate-900 dark:text-white' 
+                    : 'hover:bg-slate-100/60 dark:hover:bg-slate-900/40 text-slate-700 dark:text-slate-300';
+
+                const requiredVal = getRequiredHoursForDay(day.dayName).toFixed(2);
+                const workedVal = day.worked.toFixed(2);
+                const balanceVal = day.balance.toFixed(2);
+
+                const rowHtml = `
+                    <tr class="${activeClass} transition-colors group">
+                        <td class="py-3 px-3 font-semibold text-slate-900 dark:text-slate-200">
+                            <span class="block">${day.date}</span>
+                            <span class="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase">${day.dayName}</span>
+                        </td>
+                        
+                        <!-- Session 1 -->
+                        <td class="py-2 px-1 text-center">
+                            <input type="time" value="${day.s1In}" 
+                                onchange="handleCellChange(${index}, 's1In', this.value)"
+                                class="w-24 bg-white text-slate-800 border border-slate-200 dark:bg-slate-900 dark:text-slate-200 dark:border-slate-800 rounded p-1 text-center font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                        </td>
+                        <td class="py-2 px-1 text-center border-r border-slate-200/50 dark:border-slate-800/40">
+                            <input type="time" value="${day.s1Out}" 
+                                onchange="handleCellChange(${index}, 's1Out', this.value)"
+                                class="w-24 bg-white text-slate-800 border border-slate-200 dark:bg-slate-900 dark:text-slate-200 dark:border-slate-800 rounded p-1 text-center font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                        </td>
+
+                        <!-- Session 2 -->
+                        <td class="py-2 px-1 text-center">
+                            <input type="time" value="${day.s2In}" 
+                                onchange="handleCellChange(${index}, 's2In', this.value)"
+                                class="w-24 bg-white text-slate-800 border border-slate-200 dark:bg-slate-900 dark:text-slate-200 dark:border-slate-800 rounded p-1 text-center font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                        </td>
+                        <td class="py-2 px-1 text-center">
+                            <input type="time" value="${day.s2Out}" 
+                                onchange="handleCellChange(${index}, 's2Out', this.value)"
+                                class="w-24 bg-white text-slate-800 border border-slate-200 dark:bg-slate-900 dark:text-slate-200 dark:border-slate-800 rounded p-1 text-center font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                        </td>
+
+                        <!-- Required -->
+                        <td class="py-3 px-3 text-right font-mono text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                            ${requiredVal}
+                        </td>
+
+                        <!-- Worked -->
+                        <td class="py-3 px-3 text-right font-mono font-bold text-slate-900 dark:text-slate-200 whitespace-nowrap">
+                            ${workedVal}
+                        </td>
+
+                        <!-- Balance (Forced full-number rendering with px-3 to avoid clipping) -->
+                        <td class="py-3 px-3 text-right font-mono font-extrabold ${day.balance > 0 ? 'text-pink-600 dark:text-pink-400' : 'text-emerald-600 dark:text-emerald-400'} whitespace-nowrap">
+                            ${balanceVal}
+                        </td>
+
+                        <!-- Actions -->
+                        <td class="py-2 px-3 text-center">
+                            <div class="flex items-center justify-center gap-2">
+                                <button onclick="selectActiveRow(${index})" 
+                                    class="p-1.5 rounded ${isActive ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400'}"
+                                    title="Choose this day for Calculator target">
+                                    <i class="fa-solid fa-bullseye text-xs"></i>
+                                </button>
+                                <label class="flex items-center cursor-pointer" title="Day Off">
+                                    <input type="checkbox" ${day.isOff ? 'checked' : ''} 
+                                        onchange="handleCheckboxChange(${index}, this.checked)"
+                                        class="accent-indigo-500 h-3.5 w-3.5 bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-800 rounded">
+                                </label>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+                tbody.insertAdjacentHTML('beforeend', rowHtml);
+            });
+        }
+
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const id = 'toast_' + Math.random().toString(36).substring(2, 9);
+            
+            let iconClass = 'fa-circle-check text-emerald-500';
+            let borderClass = 'border-emerald-200 dark:border-emerald-500/20';
+            if (type === 'error') {
+                iconClass = 'fa-circle-xmark text-pink-500';
+                borderClass = 'border-pink-200 dark:border-pink-500/20';
+            } else if (type === 'info') {
+                iconClass = 'fa-circle-info text-sky-500';
+                borderClass = 'border-sky-200 dark:border-sky-500/20';
+            }
+
+            const toastHtml = `
+                <div id="${id}" class="flex items-center gap-2.5 bg-white dark:bg-slate-950 border ${borderClass} px-3.5 py-2.5 rounded-lg shadow-lg pointer-events-auto transition-all duration-300 translate-x-12 opacity-0">
+                    <i class="fa-solid ${iconClass}"></i>
+                    <p class="text-xs text-slate-800 dark:text-slate-200 font-bold">${message}</p>
+                </div>
+            `;
+            container.insertAdjacentHTML('beforeend', toastHtml);
+
+            setTimeout(() => {
+                const el = document.getElementById(id);
+                if (el) el.classList.remove('translate-x-12', 'opacity-0');
+            }, 50);
+
+            setTimeout(() => {
+                const el = document.getElementById(id);
+                if (el) {
+                    el.classList.add('opacity-0', 'translate-y-2');
+                    setTimeout(() => el.remove(), 300);
+                }
+            }, 4000);
+        }
+
+        function getDayFullLabel(dayAbbr) {
+            const labels = {
+                'MON': 'Monday', 'TUE': 'Tuesday', 'WED': 'Wednesday', 
+                'THU': 'Thursday', 'FRI': 'Friday', 'SAT': 'Saturday', 'SUN': 'Sunday'
+            };
+            return labels[dayAbbr] || dayAbbr;
+        }
+
+        function toggleDarkMode() {
+            const isDarkNow = document.documentElement.classList.toggle('dark');
+            const icon = document.getElementById('theme-icon');
+            if (isDarkNow) {
+                icon.className = 'fa-solid fa-sun';
+                showToast("Switched to Deep Dark theme", "info");
+            } else {
+                icon.className = 'fa-solid fa-moon';
+                showToast("Switched to Deep Light theme", "info");
+            }
+        }
+    </script>
+</body>
+</html>
