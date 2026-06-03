@@ -199,7 +199,7 @@
                             </div>
                             
                             <div class="my-4 text-center">
-                                <p class="text-[10px] uppercase tracking-widest text-slate-500 dark:text-slate-450 font-bold">Time Left Today</p>
+                                <p class="text-[10px] uppercase tracking-widest text-slate-500 dark:text-slate-450 font-bold">Work Time Left</p>
                                 <p id="std-countdown" class="text-4xl font-mono font-black text-slate-850 dark:text-slate-100 tracking-wider my-1">00:00:00</p>
                                 <div id="std-context" class="text-xs text-indigo-600 dark:text-indigo-400 font-semibold">Calculating standard exit...</div>
                             </div>
@@ -384,13 +384,14 @@
             <!-- Table wrapper with forced horizontal scrolling to prevent squishing values on narrow screen resolutions -->
             <div class="overflow-x-auto w-full">
                 <!-- Strict min-width container ensuring the final "Balance" and "Worked" numbers always display full decimal places -->
-                <table class="w-full min-w-[940px] text-left text-xs text-slate-650 dark:text-slate-300 table-fixed">
+                <table class="w-full min-w-[1040px] text-left text-xs text-slate-650 dark:text-slate-300 table-fixed">
                     <colgroup>
                         <col class="w-[100px]"> <!-- Day column -->
                         <col class="w-[120px]"> <!-- Session 1 In -->
                         <col class="w-[120px]"> <!-- Session 1 Out -->
                         <col class="w-[120px]"> <!-- Session 2 In -->
                         <col class="w-[120px]"> <!-- Session 2 Out -->
+                        <col class="w-[100px]"> <!-- S1→S2 Gap -->
                         <col class="w-[90px]">  <!-- Required column -->
                         <col class="w-[90px]">  <!-- Worked column -->
                         <col class="w-[100px]"> <!-- Balance column -->
@@ -401,6 +402,7 @@
                             <th class="py-3 px-3">Day</th>
                             <th class="py-3 px-2 text-center" colspan="2">Session 1</th>
                             <th class="py-3 px-2 text-center" colspan="2">Session 2</th>
+                            <th class="py-3 px-2 text-center text-amber-700 dark:text-amber-400">S1→S2 Gap</th>
                             <th class="py-3 px-3 text-right">Required</th>
                             <th class="py-3 px-3 text-right">Worked</th>
                             <th class="py-3 px-3 text-right text-indigo-600 dark:text-indigo-400 font-extrabold whitespace-nowrap">Balance (0.00)</th>
@@ -411,7 +413,8 @@
                             <th class="text-center border-r border-slate-200/50 dark:border-slate-800/40 py-1">In</th>
                             <th class="text-center border-r border-slate-200/50 dark:border-slate-800/40 py-1">Out</th>
                             <th class="text-center border-r border-slate-200/50 dark:border-slate-800/40 py-1">In</th>
-                            <th class="text-center py-1">Out</th>
+                            <th class="text-center border-r border-slate-200/50 dark:border-slate-800/40 py-1">Out</th>
+                            <th class="text-center py-1 text-amber-600/80 dark:text-amber-400/80">+work if &lt;1h</th>
                             <th></th>
                             <th></th>
                             <th class="text-right px-3 text-[8.5px] text-indigo-500/80 font-bold">Untruncated</th>
@@ -461,9 +464,9 @@
                         </div>
                     </div>
                     <div>
-                        <label class="block text-[10px] text-slate-500 dark:text-slate-450 uppercase font-bold">Standard Lunch Limit</label>
+                        <label class="block text-[10px] text-slate-500 dark:text-slate-450 uppercase font-bold">Default Lunch (if not punched)</label>
                         <div class="flex items-center gap-2 mt-1">
-                            <input type="number" id="cfg-lunch" step="0.1" value="2.0" onchange="updateSettings()" class="w-full bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-800 rounded p-1.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                            <input type="number" id="cfg-lunch" step="0.1" value="1.5" onchange="updateSettings()" class="w-full bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-800 rounded p-1.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500">
                             <span class="text-xs text-slate-550 dark:text-slate-400 shrink-0 font-medium">hrs</span>
                         </div>
                     </div>
@@ -487,7 +490,8 @@
             reqMonThu: 7.25,  // 7 hours 15 mins
             reqFri: 7.00,     // 7 hours
             reqWeekend: 0.00,
-            standardLunch: 2.0 // standard break duration in hours
+            standardLunch: 1.5, // fallback break when s1Out→s2In not punched yet
+            shortGapWorkThresholdMins: 60 // gap under 1h: add (60 − gap) minutes as work credit
         };
 
         // Static or custom calculated list of rows
@@ -554,6 +558,236 @@
             return config.reqMonThu;
         }
 
+        // Raw minutes between session 1 out and session 2 in
+        function getRawSessionGapMins(s1OutMin, s2InMin) {
+            if (s1OutMin !== null && s2InMin !== null && s2InMin > s1OutMin) {
+                return s2InMin - s1OutMin;
+            }
+            return null;
+        }
+
+        // Gap under 1h: add (60 − gap) as work credit (e.g. 15m gap → +45m work; 45m gap → +15m work)
+        function getWorkGapMins(s1OutMin, s2InMin) {
+            const gap = getRawSessionGapMins(s1OutMin, s2InMin);
+            if (gap === null) return 0;
+            const threshold = config.shortGapWorkThresholdMins || 60;
+            if (gap < threshold) {
+                return threshold - gap;
+            }
+            return 0;
+        }
+
+        // Lunch gap: actual punched gap, or default when not yet punched
+        function getLunchBreakMins(s1OutMin, s2InMin) {
+            const gap = getRawSessionGapMins(s1OutMin, s2InMin);
+            if (gap !== null) return gap;
+            return Math.round((config.standardLunch || 1.5) * 60);
+        }
+
+        function computeDayWorkedMins(day, currentTimeMin) {
+            let worked = 0;
+            const s1InMin = timeToMinutes(day.s1In);
+            const s1OutMin = timeToMinutes(day.s1Out);
+            const s2InMin = timeToMinutes(day.s2In);
+            const s2OutMin = timeToMinutes(day.s2Out);
+            const useLive = currentTimeMin !== null && currentTimeMin !== undefined;
+
+            if (s1InMin !== null && s1OutMin !== null) {
+                worked += Math.max(0, s1OutMin - s1InMin);
+            } else if (useLive && s1InMin !== null && s1OutMin === null && currentTimeMin > s1InMin) {
+                worked += Math.max(0, currentTimeMin - s1InMin);
+            }
+
+            if (s2InMin !== null) {
+                if (s2OutMin !== null) {
+                    worked += Math.max(0, s2OutMin - s2InMin);
+                } else if (useLive && currentTimeMin > s2InMin) {
+                    worked += Math.max(0, currentTimeMin - s2InMin);
+                }
+            }
+
+            worked += getWorkGapMins(s1OutMin, s2InMin);
+            return worked;
+        }
+
+        function formatGapDisplay(gapMins, gapWorkedMins) {
+            if (gapMins === null) return { text: '--', css: 'text-slate-400 dark:text-slate-500', hint: '' };
+            const label = formatLunchLabel(gapMins);
+            if (gapWorkedMins > 0) {
+                return {
+                    text: label,
+                    css: 'text-emerald-700 dark:text-emerald-400 font-bold',
+                    hint: `+${formatLunchLabel(gapWorkedMins)} work (60m − gap)`
+                };
+            }
+            return {
+                text: label,
+                css: 'text-amber-700 dark:text-amber-400',
+                hint: 'lunch'
+            };
+        }
+
+        function formatLunchLabel(lunchMins) {
+            const h = Math.floor(lunchMins / 60);
+            const m = lunchMins % 60;
+            if (h > 0 && m > 0) return `${h}h ${m}m`;
+            if (h > 0) return `${h}h`;
+            return `${m}m`;
+        }
+
+        // Work phase for leave-time / countdown logic
+        function getDayWorkPhase(day) {
+            const s1InMin = timeToMinutes(day.s1In);
+            const s1OutMin = timeToMinutes(day.s1Out);
+            const s2InMin = timeToMinutes(day.s2In);
+            const s2OutMin = timeToMinutes(day.s2Out);
+
+            if (!day.s1In && !day.s2In) return 'idle';
+            if (s2OutMin !== null) return 'complete';
+            if (s2InMin !== null) return 'session2';
+            if (s1OutMin !== null) return 'between';
+            if (s1InMin !== null) return 'session1';
+            return 'idle';
+        }
+
+        function computeOptimizerWorkedMins(day, currentTimeMin) {
+            return computeDayWorkedMins(day, currentTimeMin);
+        }
+
+        // Projected clock-out to hit totalMinsNeeded (uses live clock during open session 1)
+        function solveTargetLeaveMin(day, totalMinsNeeded, currentTimeMin) {
+            const phase = getDayWorkPhase(day);
+            const s1InMin = timeToMinutes(day.s1In);
+            const s1OutMin = timeToMinutes(day.s1Out);
+            const s2InMin = timeToMinutes(day.s2In);
+            const s2OutMin = timeToMinutes(day.s2Out);
+
+            let s1WorkedMins = 0;
+            if (s1InMin !== null && s1OutMin !== null) {
+                s1WorkedMins = Math.max(0, s1OutMin - s1InMin);
+            }
+            const workGapMins = getWorkGapMins(s1OutMin, s2InMin);
+
+            if (phase === 'complete') {
+                return s2OutMin !== null ? s2OutMin : s1OutMin;
+            }
+            if (phase === 'session1') {
+                const currentWorked = computeDayWorkedMins(day, currentTimeMin);
+                const workRemaining = Math.max(0, totalMinsNeeded - currentWorked);
+                const lunchMins = getLunchBreakMins(null, null);
+                return currentTimeMin + workRemaining + lunchMins;
+            }
+            if (phase === 'session2') {
+                const currentWorked = computeDayWorkedMins(day, currentTimeMin);
+                const remaining = Math.max(0, totalMinsNeeded - currentWorked);
+                return currentTimeMin + remaining;
+            }
+            if (phase === 'between') {
+                const currentWorked = computeDayWorkedMins(day, currentTimeMin);
+                const lunchMins = getLunchBreakMins(s1OutMin, null);
+                const remaining = Math.max(0, totalMinsNeeded - currentWorked);
+                return s1OutMin + lunchMins + remaining;
+            }
+            return null;
+        }
+
+        function renderTargetPanel(prefix, targetLeavingMin, totalMinsNeeded, currentWorkedMins, currentTimeMin, day, phase, onMetCallback) {
+            const leaveEl = document.getElementById(`${prefix}-leave-time`);
+            const countdownEl = document.getElementById(`${prefix}-countdown`);
+            const contextEl = document.getElementById(`${prefix}-context`);
+            const progressBar = document.getElementById(`${prefix}-progress-bar`);
+            const progressLbl = document.getElementById(`${prefix}-lbl-progress`);
+            const inLbl = document.getElementById(`${prefix}-lbl-in`);
+
+            inLbl.innerText = `In: ${day.s2In || day.s1In || '--:--'}`;
+
+            if (phase === 'idle') {
+                leaveEl.innerText = '--:--';
+                countdownEl.innerText = '--:--:--';
+                countdownEl.className = "text-4xl font-mono font-black text-slate-850 dark:text-slate-100 tracking-wider my-1";
+                contextEl.innerText = 'Enter session 1 check-in to calculate targets';
+                progressBar.style.width = '0%';
+                progressLbl.innerText = '0% Completed';
+                return;
+            }
+
+            const workRemainingMins = Math.max(0, totalMinsNeeded - currentWorkedMins);
+            const dailyMet = workRemainingMins <= 0;
+            const progress = Math.min(100, Math.max(0, (currentWorkedMins / totalMinsNeeded) * 100));
+            progressBar.style.width = `${progress}%`;
+            progressLbl.innerText = `${progress.toFixed(1)}% Completed`;
+
+            if (phase === 'complete') {
+                leaveEl.innerText = minutesToTime(targetLeavingMin);
+                const metLabel = prefix === 'cum' ? 'Weekly catch-up met' : 'Daily target met';
+                const shortLabel = prefix === 'cum' ? 'weekly' : 'daily';
+                if (dailyMet) {
+                    countdownEl.innerText = 'COMPLETED';
+                    countdownEl.className = prefix === 'cum'
+                        ? "text-3xl font-mono font-extrabold text-violet-600 dark:text-violet-400 tracking-wider my-1 animate-pulse"
+                        : "text-3xl font-mono font-extrabold text-emerald-600 dark:text-emerald-400 tracking-wider my-1 animate-pulse";
+                    contextEl.innerHTML = `<span class="${prefix === 'cum' ? 'text-violet-600 dark:text-violet-400' : 'text-emerald-600 dark:text-emerald-400'} font-bold"><i class="fa-solid fa-circle-check"></i> ${metLabel} (${minutesToDecimalHours(currentWorkedMins).toFixed(2)} hrs)</span>`;
+                    onMetCallback();
+                } else {
+                    const shortHrs = minutesToDecimalHours(workRemainingMins).toFixed(2);
+                    countdownEl.innerText = `${String(Math.floor(workRemainingMins / 60)).padStart(2, '0')}:${String(Math.floor(workRemainingMins % 60)).padStart(2, '0')}:00`;
+                    countdownEl.className = "text-4xl font-mono font-black text-pink-600 dark:text-pink-400 tracking-wider my-1";
+                    contextEl.innerHTML = `<span class="text-pink-600 dark:text-pink-400 font-bold"><i class="fa-solid fa-triangle-exclamation"></i> Short ${shortHrs} hrs (${shortLabel}) — left at ${minutesToTime(targetLeavingMin)}</span>`;
+                }
+                return;
+            }
+
+            leaveEl.innerText = minutesToTime(targetLeavingMin);
+
+            if (targetLeavingMin === null) {
+                countdownEl.innerText = '--:--:--';
+                contextEl.innerText = 'Incomplete check-in variables';
+                return;
+            }
+
+            let contextNote = '';
+            const lunchEstMins = phase === 'between'
+                ? getLunchBreakMins(timeToMinutes(day.s1Out), null)
+                : (phase === 'session1' ? getLunchBreakMins(null, null) : 0);
+
+            if (phase === 'session1') {
+                contextNote = ` · ${minutesToDecimalHours(currentWorkedMins).toFixed(2)}h done · leave ~${minutesToTime(targetLeavingMin)} (incl. est. ${formatLunchLabel(lunchEstMins)} lunch)`;
+            } else if (phase === 'between') {
+                contextNote = ` · ${minutesToDecimalHours(currentWorkedMins).toFixed(2)}h done · leave ~${minutesToTime(targetLeavingMin)} (incl. est. ${formatLunchLabel(lunchEstMins)} lunch)`;
+            } else if (phase === 'session2') {
+                contextNote = ` · ${minutesToDecimalHours(currentWorkedMins).toFixed(2)}h done · leave ~${minutesToTime(targetLeavingMin)}`;
+                const s1OutMin = timeToMinutes(day.s1Out);
+                const s2InMin = timeToMinutes(day.s2In);
+                if (s1OutMin !== null && s2InMin !== null) {
+                    const workGap = getWorkGapMins(s1OutMin, s2InMin);
+                    const lunchMins = getLunchBreakMins(s1OutMin, s2InMin);
+                    if (workGap > 0) {
+                        contextNote += ` (${formatLunchLabel(workGap)} short-gap work credit)`;
+                    } else if (lunchMins >= 60) {
+                        contextNote += ` (${formatLunchLabel(lunchMins)} lunch)`;
+                    }
+                }
+            }
+
+            if (dailyMet) {
+                countdownEl.innerText = 'COMPLETED';
+                countdownEl.className = prefix === 'cum'
+                    ? "text-3xl font-mono font-extrabold text-violet-600 dark:text-violet-400 tracking-wider my-1 animate-pulse"
+                    : "text-3xl font-mono font-extrabold text-emerald-600 dark:text-emerald-400 tracking-wider my-1 animate-pulse";
+                const metMsg = prefix === 'cum' ? 'Weekly catch-up target met!' : 'Daily target met!';
+                contextEl.innerHTML = `<span class="${prefix === 'cum' ? 'text-violet-600 dark:text-violet-400' : 'text-emerald-600 dark:text-emerald-400'} font-bold"><i class="fa-solid fa-circle-check"></i> ${metMsg}</span>`;
+                onMetCallback();
+            } else {
+                const hoursLeft = Math.floor(workRemainingMins / 60);
+                const minsLeft = Math.floor(workRemainingMins % 60);
+                const secsLeft = 59 - (new Date().getSeconds());
+                countdownEl.innerText = `${String(hoursLeft).padStart(2, '0')}:${String(minsLeft).padStart(2, '0')}:${String(secsLeft).padStart(2, '0')}`;
+                countdownEl.className = "text-4xl font-mono font-black text-slate-850 dark:text-slate-100 tracking-wider my-1";
+                const label = prefix === 'std' ? 'Work hours left to hit daily 0-balance' : 'Work hours left for weekly catch-up';
+                contextEl.innerHTML = `${label}${contextNote}`;
+            }
+        }
+
         // Core continuous loop for real-time timer calculations
         function gameLoop() {
             if (useRealtime) {
@@ -566,6 +800,9 @@
         }
 
         function calculateWorkedTimes() {
+            const simEl = document.getElementById('sim-time');
+            const simTimeMin = simEl ? timeToMinutes(simEl.value) : null;
+
             daysData.forEach((day, index) => {
                 let requiredHours = getRequiredHoursForDay(day.dayName);
                 
@@ -574,35 +811,23 @@
                     requiredHours = 0;
                 }
 
-                let workedMins = 0;
-
-                // Session 1 Calculations
-                const s1InMin = timeToMinutes(day.s1In);
                 const s1OutMin = timeToMinutes(day.s1Out);
-                if (s1InMin !== null && s1OutMin !== null) {
-                    workedMins += Math.max(0, s1OutMin - s1InMin);
-                }
-
-                // Session 2 Calculations
                 const s2InMin = timeToMinutes(day.s2In);
-                const s2OutMin = timeToMinutes(day.s2Out);
-                if (s2InMin !== null && s2OutMin !== null) {
-                    workedMins += Math.max(0, s2OutMin - s2InMin);
-                }
+                const gapMins = getRawSessionGapMins(s1OutMin, s2InMin);
+                const gapWorkedMins = getWorkGapMins(s1OutMin, s2InMin);
 
-                // Convert worked time to decimal format
-                const computedWorked = minutesToDecimalHours(workedMins);
-                
-                if (day.s2In && !day.s2Out && index === selectedDayIndex) {
-                    // This is our active partial day, calculate dynamically up to current checkout
-                    day.worked = computedWorked; 
-                } else if (!day.s1In && !day.s2In) {
-                    day.worked = 0;
-                } else {
-                    day.worked = computedWorked;
-                }
+                day.gapMins = gapMins;
+                day.gapWorked = minutesToDecimalHours(gapWorkedMins);
 
-                // Calculate local balance for this day
+                const useLiveClock = (index === selectedDayIndex && (
+                    (day.s1In && !day.s1Out) || (day.s2In && !day.s2Out)
+                ));
+                const workedMins = (!day.s1In && !day.s2In)
+                    ? 0
+                    : computeDayWorkedMins(day, useLiveClock ? simTimeMin : null);
+
+                day.worked = minutesToDecimalHours(workedMins);
+
                 const computedBalance = parseFloat((requiredHours - day.worked).toFixed(2));
                 day.balance = computedBalance < 0 ? 0 : computedBalance;
             });
@@ -835,31 +1060,8 @@ Extract dates properly. Do not write any conversational summary or text around t
             // Find simulated / current time
             const simTimeVal = document.getElementById('sim-time').value;
             const currentTimeMin = timeToMinutes(simTimeVal) || 0;
-
-            // Calculate Session 1 worked minutes
-            let s1WorkedMins = 0;
-            const s1InMin = timeToMinutes(day.s1In);
-            const s1OutMin = timeToMinutes(day.s1Out);
-            if (s1InMin !== null && s1OutMin !== null) {
-                s1WorkedMins = Math.max(0, s1OutMin - s1InMin);
-            }
-
-            // Calculate session baselines
-            let s2InMin = timeToMinutes(day.s2In);
-            let activeSessionStart = null;
-            let currentWorkedMins = s1WorkedMins;
-
-            if (s2InMin !== null) {
-                activeSessionStart = s2InMin;
-                if (currentTimeMin > s2InMin) {
-                    currentWorkedMins += (currentTimeMin - s2InMin);
-                }
-            } else if (s1InMin !== null && s1OutMin === null) {
-                activeSessionStart = s1InMin;
-                if (currentTimeMin > s1InMin) {
-                    currentWorkedMins += (currentTimeMin - s1InMin);
-                }
-            }
+            const phase = getDayWorkPhase(day);
+            const currentWorkedMins = computeOptimizerWorkedMins(day, currentTimeMin);
 
             // Cumulative weekly deficit before today
             let weeklyDeficitMins = 0;
@@ -873,91 +1075,17 @@ Extract dates properly. Do not write any conversational summary or text around t
                 }
             });
 
-            // Set up labels for goals
+            const totalMinsNeededStd = targetWorkedHoursToday * 60;
+            const totalMinsNeededCum = totalMinsNeededStd + weeklyDeficitMins;
+
             document.getElementById('lbl-goal-standard').innerText = `Goal: ${targetWorkedHoursToday.toFixed(2)} hrs`;
-            document.getElementById('lbl-goal-cumulative').innerText = `Goal: ${(targetWorkedHoursToday + (weeklyDeficitMins/60)).toFixed(2)} hrs`;
+            document.getElementById('lbl-goal-cumulative').innerText = `Goal: ${(totalMinsNeededCum / 60).toFixed(2)} hrs`;
 
-            // 1. SOLVE TARGET 1: TODAY'S STANDARD exit
-            let targetLeavingMinStd = null;
-            let totalMinsNeededStd = targetWorkedHoursToday * 60;
-            
-            if (activeSessionStart !== null) {
-                const remainingMinsNeededStd = totalMinsNeededStd - s1WorkedMins;
-                if (day.s2In) {
-                    targetLeavingMinStd = s2InMin + remainingMinsNeededStd;
-                } else {
-                    targetLeavingMinStd = s1InMin + (config.standardLunch * 60) + totalMinsNeededStd;
-                }
-            }
+            const targetLeavingMinStd = solveTargetLeaveMin(day, totalMinsNeededStd, currentTimeMin);
+            const targetLeavingMinCum = solveTargetLeaveMin(day, totalMinsNeededCum, currentTimeMin);
 
-            // 2. SOLVE TARGET 2: WEEK CUMULATIVE CATCH-UP exit
-            let targetLeavingMinCum = null;
-            let totalMinsNeededCum = (targetWorkedHoursToday * 60) + weeklyDeficitMins;
-            
-            if (activeSessionStart !== null) {
-                const remainingMinsNeededCum = totalMinsNeededCum - s1WorkedMins;
-                if (day.s2In) {
-                    targetLeavingMinCum = s2InMin + remainingMinsNeededCum;
-                } else {
-                    targetLeavingMinCum = s1InMin + (config.standardLunch * 60) + totalMinsNeededCum;
-                }
-            }
-
-            // RENDER TARGET 1 (Standard) Timer Views
-            document.getElementById('std-leave-time').innerText = minutesToTime(targetLeavingMinStd);
-            document.getElementById('std-lbl-in').innerText = `In: ${day.s2In || day.s1In || '--:--'}`;
-            if (targetLeavingMinStd !== null) {
-                const remainingMinStd = targetLeavingMinStd - currentTimeMin;
-                const progressStd = Math.min(100, Math.max(0, (currentWorkedMins / totalMinsNeededStd) * 100));
-                
-                document.getElementById('std-progress-bar').style.width = `${progressStd}%`;
-                document.getElementById('std-lbl-progress').innerText = `${progressStd.toFixed(1)}% Completed`;
-
-                if (remainingMinStd > 0) {
-                    const hoursLeft = Math.floor(remainingMinStd / 60);
-                    const minsLeft = Math.floor(remainingMinStd % 60);
-                    const secsLeft = 59 - (new Date().getSeconds());
-                    document.getElementById('std-countdown').innerText = `${String(hoursLeft).padStart(2, '0')}:${String(minsLeft).padStart(2, '0')}:${String(secsLeft).padStart(2, '0')}`;
-                    document.getElementById('std-countdown').className = "text-4xl font-mono font-black text-slate-850 dark:text-slate-100 tracking-wider my-1";
-                    document.getElementById('std-context').innerHTML = `Remaining until Daily 0-Balance`;
-                } else {
-                    document.getElementById('std-countdown').innerText = "COMPLETED";
-                    document.getElementById('std-countdown').className = "text-3xl font-mono font-extrabold text-emerald-600 dark:text-emerald-400 tracking-wider my-1 animate-pulse";
-                    document.getElementById('std-context').innerHTML = `<span class="text-emerald-600 dark:text-emerald-400 font-bold"><i class="fa-solid fa-circle-check"></i> Standard Hours met!</span>`;
-                    triggerStandardChime();
-                }
-            } else {
-                document.getElementById('std-countdown').innerText = "--:--:--";
-                document.getElementById('std-context').innerText = "Incomplete check-in variables";
-            }
-
-            // RENDER TARGET 2 (Weekly Cumulative) Timer Views
-            document.getElementById('cum-leave-time').innerText = minutesToTime(targetLeavingMinCum);
-            document.getElementById('cum-lbl-in').innerText = `In: ${day.s2In || day.s1In || '--:--'}`;
-            if (targetLeavingMinCum !== null) {
-                const remainingMinCum = targetLeavingMinCum - currentTimeMin;
-                const progressCum = Math.min(100, Math.max(0, (currentWorkedMins / totalMinsNeededCum) * 100));
-                
-                document.getElementById('cum-progress-bar').style.width = `${progressCum}%`;
-                document.getElementById('cum-lbl-progress').innerText = `${progressCum.toFixed(1)}% Completed`;
-
-                if (remainingMinCum > 0) {
-                    const hoursLeft = Math.floor(remainingMinCum / 60);
-                    const minsLeft = Math.floor(remainingMinCum % 60);
-                    const secsLeft = 59 - (new Date().getSeconds());
-                    document.getElementById('cum-countdown').innerText = `${String(hoursLeft).padStart(2, '0')}:${String(minsLeft).padStart(2, '0')}:${String(secsLeft).padStart(2, '0')}`;
-                    document.getElementById('cum-countdown').className = "text-4xl font-mono font-black text-slate-850 dark:text-slate-100 tracking-wider my-1";
-                    document.getElementById('cum-context').innerHTML = `Remaining until Deficits Paid Off`;
-                } else {
-                    document.getElementById('cum-countdown').innerText = "COMPLETED";
-                    document.getElementById('cum-countdown').className = "text-3xl font-mono font-extrabold text-violet-600 dark:text-violet-400 tracking-wider my-1 animate-pulse";
-                    document.getElementById('cum-context').innerHTML = `<span class="text-violet-600 dark:text-violet-400 font-bold"><i class="fa-solid fa-circle-check"></i> Week is paid back!</span>`;
-                    triggerCumulativeChime();
-                }
-            } else {
-                document.getElementById('cum-countdown').innerText = "--:--:--";
-                document.getElementById('cum-context').innerText = "Incomplete check-in variables";
-            }
+            renderTargetPanel('std', targetLeavingMinStd, totalMinsNeededStd, currentWorkedMins, currentTimeMin, day, phase, triggerStandardChime);
+            renderTargetPanel('cum', targetLeavingMinCum, totalMinsNeededCum, currentWorkedMins, currentTimeMin, day, phase, triggerCumulativeChime);
         }
 
         function triggerStandardChime() {
@@ -1150,7 +1278,13 @@ Extract dates properly. Do not write any conversational summary or text around t
 
         function handleCellChange(index, field, value) {
             daysData[index][field] = value.trim();
+            if (selectedDayIndex !== index) {
+                selectedDayIndex = index;
+                lastStdChimeTriggered = false;
+                lastCumChimeTriggered = false;
+            }
             calculateWorkedTimes();
+            renderTable();
             updateDashboardStats();
             updateOptimizer();
         }
@@ -1194,7 +1328,7 @@ Extract dates properly. Do not write any conversational summary or text around t
             config.reqMonThu = parseFloat(document.getElementById('cfg-req-mon-thu').value) || 0;
             config.reqFri = parseFloat(document.getElementById('cfg-req-fri').value) || 0;
             config.reqWeekend = parseFloat(document.getElementById('cfg-req-weekend').value) || 0;
-            config.standardLunch = parseFloat(document.getElementById('cfg-lunch').value) || 2.0;
+            config.standardLunch = parseFloat(document.getElementById('cfg-lunch').value) || 1.5;
             
             showToast("Configurations modified successfully!", "success");
             triggerRecalculate();
@@ -1260,6 +1394,7 @@ Extract dates properly. Do not write any conversational summary or text around t
                 const requiredVal = getRequiredHoursForDay(day.dayName).toFixed(2);
                 const workedVal = day.worked.toFixed(2);
                 const balanceVal = day.balance.toFixed(2);
+                const gapDisplay = formatGapDisplay(day.gapMins ?? null, (day.gapWorked || 0) * 60);
 
                 const rowHtml = `
                     <tr class="${activeClass} transition-colors group">
@@ -1286,10 +1421,16 @@ Extract dates properly. Do not write any conversational summary or text around t
                                 onchange="handleCellChange(${index}, 's2In', this.value)"
                                 class="w-24 bg-white text-slate-800 border border-slate-200 dark:bg-slate-900 dark:text-slate-200 dark:border-slate-800 rounded p-1 text-center font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500">
                         </td>
-                        <td class="py-2 px-1 text-center">
+                        <td class="py-2 px-1 text-center border-r border-slate-200/50 dark:border-slate-800/40">
                             <input type="time" value="${day.s2Out}" 
                                 onchange="handleCellChange(${index}, 's2Out', this.value)"
                                 class="w-24 bg-white text-slate-800 border border-slate-200 dark:bg-slate-900 dark:text-slate-200 dark:border-slate-800 rounded p-1 text-center font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                        </td>
+
+                        <!-- S1→S2 Gap -->
+                        <td class="py-3 px-2 text-center whitespace-nowrap">
+                            <span class="font-mono text-xs ${gapDisplay.css}">${gapDisplay.text}</span>
+                            ${gapDisplay.hint ? `<span class="block text-[9px] font-bold mt-0.5 ${gapDisplay.css}">${gapDisplay.hint}</span>` : ''}
                         </td>
 
                         <!-- Required -->
