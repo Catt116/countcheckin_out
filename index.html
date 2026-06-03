@@ -352,7 +352,7 @@
 
                 <div class="px-5 pb-5">
                     <div class="relative">
-                        <textarea id="paste-input" rows="3" 
+                        <textarea id="paste-input" rows="3" oninput="scheduleSave()"
                             placeholder="Paste check-in/out text data here...&#10;01/06 MON  9:27  12:00  14:19  17:50  0.00  6.07  1.18&#10;02/06 TUE  9:17  12:01  14:04  18:00  0.00  6.67  0.58" 
                             class="w-full bg-slate-50 dark:bg-slate-900 text-slate-850 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-650 border border-slate-200 dark:border-slate-800 rounded-lg p-3 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all"></textarea>
                         <button onclick="handlePasteAction()" class="absolute right-3 bottom-3 bg-indigo-600 hover:bg-indigo-500 text-white px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-md shadow-indigo-600/15 active:scale-95 transition-all">
@@ -376,9 +376,25 @@
                         <i class="fa-solid fa-arrows-left-right"></i> Scroll right for full numbers
                     </span>
                 </div>
-                <button onclick="resetToInitial()" class="text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-white text-xs flex items-center gap-1 transition-colors">
-                    <i class="fa-solid fa-arrows-rotate"></i> Reset Week
-                </button>
+                <div class="flex flex-wrap items-center gap-2">
+                    <label class="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase">Saved weeks</label>
+                    <select id="week-history-select" onchange="switchToWeek(this.value)"
+                        class="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-800 rounded-lg px-2 py-1.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500 min-w-[160px]">
+                    </select>
+                    <button onclick="goToCurrentWeek()" class="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold transition-all" title="Jump to this calendar week">
+                        <i class="fa-solid fa-calendar-day"></i> This week
+                    </button>
+                    <button onclick="exportWeekData()" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-semibold transition-all border border-slate-200 dark:border-slate-750">
+                        <i class="fa-solid fa-download"></i> Export
+                    </button>
+                    <button onclick="document.getElementById('import-file').click()" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-semibold transition-all border border-slate-200 dark:border-slate-750">
+                        <i class="fa-solid fa-upload"></i> Import
+                    </button>
+                    <input type="file" id="import-file" accept=".json,application/json" class="hidden" onchange="importWeekData(this)">
+                    <button onclick="resetToInitial()" class="text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-white text-xs flex items-center gap-1 transition-colors px-2">
+                        <i class="fa-solid fa-arrows-rotate"></i> Reset Week
+                    </button>
+                </div>
             </div>
             
             <!-- Table wrapper with forced horizontal scrolling to prevent squishing values on narrow screen resolutions -->
@@ -485,6 +501,9 @@
     </footer>
 
     <script>
+        const STORAGE_PREFIX = 'checkinout_v1';
+        const DAY_ABBR = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+
         // Configuration Parameters
         let config = {
             reqMonThu: 7.25,  // 7 hours 15 mins
@@ -494,36 +513,357 @@
             shortGapWorkThresholdMins: 60 // gap under 1h: add (60 − gap) minutes as work credit
         };
 
-        // Static or custom calculated list of rows
-        let daysData = [
-            { date: "31/05", dayName: "SUN", s1In: "", s1Out: "", s2In: "", s2Out: "", adjust: 0, worked: 0, balance: 0, isOff: true, label: "W" },
-            { date: "01/06", dayName: "MON", s1In: "09:27", s1Out: "12:00", s2In: "14:19", s2Out: "17:50", adjust: 0, worked: 6.07, balance: 1.18, isOff: false, label: "" },
-            { date: "02/06", dayName: "TUE", s1In: "09:17", s1Out: "12:01", s2In: "14:04", s2Out: "18:00", adjust: 0, worked: 6.67, balance: 0.58, isOff: false, label: "" },
-            { date: "03/06", dayName: "WED", s1In: "", s1Out: "", s2In: "", s2Out: "", adjust: 0, worked: 0, balance: 7.25, isOff: false, label: "" },
-            { date: "04/06", dayName: "THU", s1In: "", s1Out: "", s2In: "", s2Out: "", adjust: 0, worked: 0, balance: 7.25, isOff: false, label: "" },
-            { date: "05/06", dayName: "FRI", s1In: "", s1Out: "", s2In: "", s2Out: "", adjust: 0, worked: 0, balance: 7.00, isOff: false, label: "" },
-            { date: "06/06", dayName: "SAT", s1In: "", s1Out: "", s2In: "", s2Out: "", adjust: 0, worked: 0, balance: 0, isOff: true, label: "W" }
-        ];
-
-        // Active highlighted day (defaults to Tuesday 02/06 to represent tracking state)
-        let selectedDayIndex = 2; 
+        let currentWeekKey = '';
+        let currentWeekStart = null;
+        let daysData = [];
+        let selectedDayIndex = 0;
         let useRealtime = true;
         let alarmEnabled = false;
-        
+        let saveDebounceTimer = null;
+        let isHydrating = false;
+
         let lastStdChimeTriggered = false;
         let lastCumChimeTriggered = false;
 
-        window.onload = function() {
-            // Apply initial calculations
+        function getWeekStartSunday(refDate = new Date()) {
+            const d = new Date(refDate);
+            d.setDate(d.getDate() - d.getDay());
+            d.setHours(0, 0, 0, 0);
+            return d;
+        }
+
+        function formatDDMM(date) {
+            const dd = String(date.getDate()).padStart(2, '0');
+            const mm = String(date.getMonth() + 1).padStart(2, '0');
+            return `${dd}/${mm}`;
+        }
+
+        function getWeekKeyFromStart(weekStart) {
+            const y = weekStart.getFullYear();
+            const m = String(weekStart.getMonth() + 1).padStart(2, '0');
+            const day = String(weekStart.getDate()).padStart(2, '0');
+            return `${STORAGE_PREFIX}_week_${y}-${m}-${day}`;
+        }
+
+        function parseWeekKeyToStart(weekKey) {
+            const match = weekKey.match(/_week_(\d{4})-(\d{2})-(\d{2})$/);
+            if (!match) return getWeekStartSunday();
+            return new Date(parseInt(match[1], 10), parseInt(match[2], 10) - 1, parseInt(match[3], 10));
+        }
+
+        function formatWeekLabel(weekKey) {
+            const start = parseWeekKeyToStart(weekKey);
+            const dd = String(start.getDate()).padStart(2, '0');
+            const mm = String(start.getMonth() + 1).padStart(2, '0');
+            const yyyy = start.getFullYear();
+            return `Week Sun ${dd}/${mm}/${yyyy}`;
+        }
+
+        function buildEmptyWeek(weekStart) {
+            const days = [];
+            for (let i = 0; i < 7; i++) {
+                const d = new Date(weekStart);
+                d.setDate(d.getDate() + i);
+                const dayName = DAY_ABBR[d.getDay()];
+                const isWeekend = dayName === 'SAT' || dayName === 'SUN';
+                days.push({
+                    date: formatDDMM(d),
+                    dayName,
+                    s1In: '', s1Out: '', s2In: '', s2Out: '',
+                    adjust: 0, worked: 0, balance: 0,
+                    isOff: isWeekend,
+                    label: isWeekend ? 'W' : ''
+                });
+            }
+            return days;
+        }
+
+        function mergeSavedDaysIntoWeek(savedDays, weekStart) {
+            const base = buildEmptyWeek(weekStart);
+            if (!Array.isArray(savedDays) || savedDays.length === 0) return base;
+            return base.map((row) => {
+                const match = savedDays.find(s =>
+                    s.date === row.date ||
+                    (s.dayName && s.dayName.toUpperCase() === row.dayName)
+                );
+                if (!match) return row;
+                return {
+                    ...row,
+                    s1In: match.s1In || '',
+                    s1Out: match.s1Out || '',
+                    s2In: match.s2In || '',
+                    s2Out: match.s2Out || '',
+                    isOff: !!match.isOff,
+                    label: match.label || (match.isOff ? 'W' : ''),
+                    adjust: match.adjust || 0
+                };
+            });
+        }
+
+        function getDefaultSelectedDayIndex() {
+            const todayStr = formatDDMM(new Date());
+            const todayIdx = daysData.findIndex(d => d.date === todayStr);
+            if (todayIdx !== -1) return todayIdx;
+            const activeIdx = daysData.findIndex(d => d.s1In && !d.s2Out && !d.isOff);
+            if (activeIdx !== -1) return activeIdx;
+            const monIdx = daysData.findIndex(d => d.dayName === 'MON');
+            return monIdx !== -1 ? monIdx : 0;
+        }
+
+        function getWeekIndex() {
+            try {
+                return JSON.parse(localStorage.getItem(STORAGE_PREFIX + '_index') || '[]');
+            } catch {
+                return [];
+            }
+        }
+
+        function updateWeekIndex(weekKey) {
+            const index = getWeekIndex();
+            if (!index.includes(weekKey)) {
+                index.push(weekKey);
+                index.sort();
+                localStorage.setItem(STORAGE_PREFIX + '_index', JSON.stringify(index));
+            }
+        }
+
+        function refreshWeekSelector() {
+            const select = document.getElementById('week-history-select');
+            if (!select) return;
+            const index = getWeekIndex();
+            const currentKey = getWeekKeyFromStart(getWeekStartSunday());
+            const allKeys = [...new Set([...index, currentWeekKey, currentKey])].sort();
+            select.innerHTML = allKeys.map(key => {
+                const selected = key === currentWeekKey ? 'selected' : '';
+                const isNow = key === currentKey ? ' (current)' : '';
+                return `<option value="${key}" ${selected}>${formatWeekLabel(key)}${isNow}</option>`;
+            }).join('');
+            select.value = currentWeekKey;
+        }
+
+        function syncConfigToForm() {
+            const monThu = document.getElementById('cfg-req-mon-thu');
+            const fri = document.getElementById('cfg-req-fri');
+            const weekend = document.getElementById('cfg-req-weekend');
+            const lunch = document.getElementById('cfg-lunch');
+            if (monThu) monThu.value = String(config.reqMonThu);
+            if (fri) fri.value = String(config.reqFri);
+            if (weekend) weekend.value = String(config.reqWeekend);
+            if (lunch) lunch.value = String(config.standardLunch);
+        }
+
+        function applyUIPreferences(prefs = {}) {
+            if (prefs.customGoal !== undefined) {
+                const el = document.getElementById('custom-goal-input');
+                if (el) el.value = prefs.customGoal;
+            }
+            if (prefs.useRealtime !== undefined) {
+                useRealtime = !!prefs.useRealtime;
+                const rt = document.getElementById('use-realtime');
+                if (rt) rt.checked = useRealtime;
+            }
+            if (prefs.simTime) {
+                const sim = document.getElementById('sim-time');
+                if (sim) sim.value = prefs.simTime;
+            }
+            const simEl = document.getElementById('sim-time');
+            if (simEl) simEl.disabled = useRealtime;
+            if (prefs.alarmEnabled !== undefined) {
+                alarmEnabled = !!prefs.alarmEnabled;
+                const btn = document.getElementById('btn-audio');
+                if (btn) {
+                    if (alarmEnabled) {
+                        btn.innerHTML = `<i class="fa-solid fa-bell text-emerald-500"></i> Enabled`;
+                        btn.className = "px-3 py-1.5 bg-emerald-50 dark:bg-emerald-500/10 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 text-emerald-750 dark:text-emerald-300 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-all border border-emerald-300 dark:border-emerald-500/30";
+                    } else {
+                        btn.innerHTML = `<i class="fa-solid fa-bell-slash text-slate-400"></i> Disabled`;
+                        btn.className = "px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-650 dark:text-slate-300 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-all border border-slate-200 dark:border-transparent";
+                    }
+                }
+            }
+            if (prefs.darkMode !== undefined) {
+                const icon = document.getElementById('theme-icon');
+                if (prefs.darkMode) {
+                    document.documentElement.classList.add('dark');
+                    if (icon) icon.className = 'fa-solid fa-sun';
+                } else {
+                    document.documentElement.classList.remove('dark');
+                    if (icon) icon.className = 'fa-solid fa-moon';
+                }
+            }
+            if (prefs.pasteDraft !== undefined) {
+                const paste = document.getElementById('paste-input');
+                if (paste) paste.value = prefs.pasteDraft;
+            }
+        }
+
+        function collectUIPreferences() {
+            return {
+                customGoal: document.getElementById('custom-goal-input')?.value ?? '0',
+                useRealtime: document.getElementById('use-realtime')?.checked ?? true,
+                simTime: document.getElementById('sim-time')?.value ?? '',
+                alarmEnabled,
+                darkMode: document.documentElement.classList.contains('dark'),
+                pasteDraft: document.getElementById('paste-input')?.value ?? ''
+            };
+        }
+
+        function buildSavePayload() {
+            return {
+                version: 1,
+                savedAt: new Date().toISOString(),
+                weekKey: currentWeekKey,
+                weekStartISO: currentWeekStart ? currentWeekStart.toISOString() : null,
+                daysData,
+                config: { ...config },
+                selectedDayIndex,
+                ui: collectUIPreferences()
+            };
+        }
+
+        function saveState() {
+            if (isHydrating || !currentWeekKey) return;
+            try {
+                const payload = buildSavePayload();
+                localStorage.setItem(currentWeekKey, JSON.stringify(payload));
+                updateWeekIndex(currentWeekKey);
+                localStorage.setItem(STORAGE_PREFIX + '_last_week', currentWeekKey);
+                refreshWeekSelector();
+            } catch (e) {
+                console.warn('Save failed', e);
+                showToast('Could not save — storage may be full', 'error');
+            }
+        }
+
+        function scheduleSave() {
+            clearTimeout(saveDebounceTimer);
+            saveDebounceTimer = setTimeout(saveState, 300);
+        }
+
+        function applyLoadedPayload(payload, weekKey, weekStart) {
+            isHydrating = true;
+            currentWeekKey = weekKey;
+            currentWeekStart = weekStart;
+            if (payload.config) Object.assign(config, payload.config);
+            daysData = mergeSavedDaysIntoWeek(payload.daysData || [], weekStart);
+            selectedDayIndex = typeof payload.selectedDayIndex === 'number'
+                ? Math.min(Math.max(0, payload.selectedDayIndex), daysData.length - 1)
+                : getDefaultSelectedDayIndex();
+            syncConfigToForm();
+            applyUIPreferences(payload.ui || {});
+            isHydrating = false;
+        }
+
+        function loadWeekByKey(weekKey, silent = false) {
+            const weekStart = parseWeekKeyToStart(weekKey);
+            const raw = localStorage.getItem(weekKey);
+            if (raw) {
+                try {
+                    const payload = JSON.parse(raw);
+                    applyLoadedPayload(payload, weekKey, weekStart);
+                    if (!silent) showToast(`Loaded ${formatWeekLabel(weekKey)}`, 'success');
+                    return true;
+                } catch (e) {
+                    console.warn('Corrupt week data', weekKey, e);
+                }
+            }
+            applyLoadedPayload({ daysData: buildEmptyWeek(weekStart) }, weekKey, weekStart);
+            selectedDayIndex = getDefaultSelectedDayIndex();
+            if (!silent) showToast(`New week: ${formatWeekLabel(weekKey)}`, 'info');
+            return false;
+        }
+
+        function switchToWeek(weekKey) {
+            if (!weekKey || weekKey === currentWeekKey) return;
+            saveState();
+            loadWeekByKey(weekKey);
+            lastStdChimeTriggered = false;
+            lastCumChimeTriggered = false;
             calculateWorkedTimes();
             renderTable();
             updateDashboardStats();
             updateOptimizer();
-            
-            // Set up our main operational interval (every 1 second)
+            refreshWeekSelector();
+            saveState();
+        }
+
+        function goToCurrentWeek() {
+            const key = getWeekKeyFromStart(getWeekStartSunday());
+            const select = document.getElementById('week-history-select');
+            if (select) select.value = key;
+            switchToWeek(key);
+        }
+
+        function exportWeekData() {
+            saveState();
+            const payload = buildSavePayload();
+            const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            const label = formatWeekLabel(currentWeekKey).replace(/\s+/g, '_');
+            a.href = url;
+            a.download = `checkinout_${label}_${new Date().toISOString().slice(0, 10)}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast('Week exported as JSON', 'success');
+        }
+
+        function importWeekData(input) {
+            const file = input.files && input.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const payload = JSON.parse(e.target.result);
+                    if (!payload.daysData && !Array.isArray(payload)) {
+                        throw new Error('Invalid format');
+                    }
+                    const normalized = Array.isArray(payload) ? { daysData: payload, config: payload.config } : payload;
+                    const weekKey = normalized.weekKey || currentWeekKey;
+                    const weekStart = normalized.weekStartISO
+                        ? new Date(normalized.weekStartISO)
+                        : parseWeekKeyToStart(weekKey);
+                    applyLoadedPayload(normalized, weekKey, weekStart);
+                    lastStdChimeTriggered = false;
+                    lastCumChimeTriggered = false;
+                    calculateWorkedTimes();
+                    renderTable();
+                    updateDashboardStats();
+                    updateOptimizer();
+                    refreshWeekSelector();
+                    saveState();
+                    showToast('Import applied and saved', 'success');
+                } catch (err) {
+                    console.error(err);
+                    showToast('Import failed — invalid JSON file', 'error');
+                }
+                input.value = '';
+            };
+            reader.readAsText(file);
+        }
+
+        window.onload = function() {
+            isHydrating = true;
+            const todayStart = getWeekStartSunday();
+            const todayKey = getWeekKeyFromStart(todayStart);
+            const lastKey = localStorage.getItem(STORAGE_PREFIX + '_last_week');
+            const startKey = (lastKey && localStorage.getItem(lastKey)) ? lastKey : todayKey;
+            const restored = loadWeekByKey(startKey, true);
+            refreshWeekSelector();
+            isHydrating = false;
+            saveState();
+
+            calculateWorkedTimes();
+            renderTable();
+            updateDashboardStats();
+            updateOptimizer();
             setInterval(gameLoop, 1000);
-            
-            showToast("Application loaded with full number decimal formatting!", "success");
+            window.addEventListener('beforeunload', saveState);
+
+            showToast(
+                restored ? 'Restored your saved week data' : 'Ready — entries auto-save to this browser',
+                restored ? 'success' : 'info'
+            );
         };
 
         // Helper to convert time string (HH:MM) to total minutes from midnight
@@ -1015,6 +1355,7 @@ Extract dates properly. Do not write any conversational summary or text around t
                     updateOptimizer();
 
                     showToast(`Successfully extracted and parsed scheduling details!`, "success");
+                    scheduleSave();
                 } else {
                     throw new Error("Structure did not parse cleanly");
                 }
@@ -1135,6 +1476,7 @@ Extract dates properly. Do not write any conversational summary or text around t
 
         function toggleAudio() {
             alarmEnabled = !alarmEnabled;
+            scheduleSave();
             const btn = document.getElementById('btn-audio');
             if (alarmEnabled) {
                 btn.innerHTML = `<i class="fa-solid fa-bell text-emerald-500"></i> Enabled`;
@@ -1187,6 +1529,7 @@ Extract dates properly. Do not write any conversational summary or text around t
                 updateOptimizer();
                 
                 showToast(`Successfully parsed and loaded ${parsed.length} days of check-in records!`, "success");
+                scheduleSave();
             } else {
                 showToast("Could not recognize data format.", "error");
             }
@@ -1274,6 +1617,7 @@ Extract dates properly. Do not write any conversational summary or text around t
             renderTable();
             updateOptimizer();
             showToast(`Active target tracking shifted to ${getDayFullLabel(daysData[index].dayName)}`, "info");
+            scheduleSave();
         }
 
         function handleCellChange(index, field, value) {
@@ -1287,6 +1631,7 @@ Extract dates properly. Do not write any conversational summary or text around t
             renderTable();
             updateDashboardStats();
             updateOptimizer();
+            scheduleSave();
         }
 
         function handleCheckboxChange(index, checked) {
@@ -1295,12 +1640,14 @@ Extract dates properly. Do not write any conversational summary or text around t
             updateDashboardStats();
             updateOptimizer();
             renderTable();
+            scheduleSave();
         }
 
         function triggerRecalculate() {
             calculateWorkedTimes();
             updateDashboardStats();
             updateOptimizer();
+            scheduleSave();
         }
 
         function applyPreset(presetName) {
@@ -1322,6 +1669,7 @@ Extract dates properly. Do not write any conversational summary or text around t
                 showToast("Applied Standard 40h standard parameters", "success");
             }
             triggerRecalculate();
+            scheduleSave();
         }
 
         function updateSettings() {
@@ -1347,37 +1695,38 @@ Extract dates properly. Do not write any conversational summary or text around t
         }
 
         function resetToInitial() {
-            daysData = [
-                { date: "31/05", dayName: "SUN", s1In: "", s1Out: "", s2In: "", s2Out: "", adjust: 0, worked: 0, balance: 0, isOff: true, label: "W" },
-                { date: "01/06", dayName: "MON", s1In: "", s1Out: "", s2In: "", s2Out: "", adjust: 0, worked: 0, balance: 0, isOff: false, label: "" },
-                { date: "02/06", dayName: "TUE", s1In: "", s1Out: "", s2In: "", s2Out: "", adjust: 0, worked: 0, balance: 0, isOff: false, label: "" },
-                { date: "03/06", dayName: "WED", s1In: "", s1Out: "", s2In: "", s2Out: "", adjust: 0, worked: 0, balance: 0, isOff: false, label: "" },
-                { date: "04/06", dayName: "THU", s1In: "", s1Out: "", s2In: "", s2Out: "", adjust: 0, worked: 0, balance: 0, isOff: false, label: "" },
-                { date: "05/06", dayName: "FRI", s1In: "", s1Out: "", s2In: "", s2Out: "", adjust: 0, worked: 0, balance: 0, isOff: false, label: "" },
-                { date: "06/06", dayName: "SAT", s1In: "", s1Out: "", s2In: "", s2Out: "", adjust: 0, worked: 0, balance: 0, isOff: true, label: "W" }
-            ];
-            selectedDayIndex = 2;
-            
+            if (!currentWeekStart) currentWeekStart = getWeekStartSunday();
+            daysData = buildEmptyWeek(currentWeekStart);
+            selectedDayIndex = getDefaultSelectedDayIndex();
+            lastStdChimeTriggered = false;
+            lastCumChimeTriggered = false;
+
             triggerRecalculate();
             renderTable();
+            saveState();
             showToast("Week records reset completely.", "info");
         }
 
         function loadDemoData() {
-            daysData = [
-                { date: "31/05", dayName: "SUN", s1In: "", s1Out: "", s2In: "", s2Out: "", adjust: 0, worked: 0, balance: 0, isOff: true, label: "W" },
-                { date: "01/06", dayName: "MON", s1In: "09:27", s1Out: "12:00", s2In: "14:19", s2Out: "17:50", adjust: 0, worked: 6.07, balance: 1.18, isOff: false, label: "" },
-                { date: "02/06", dayName: "TUE", s1In: "09:17", s1Out: "12:01", s2In: "14:04", s2Out: "18:00", adjust: 0, worked: 6.67, balance: 0.58, isOff: false, label: "" },
-                { date: "03/06", dayName: "WED", s1In: "", s1Out: "", s2In: "", s2Out: "", adjust: 0, worked: 0, balance: 7.25, isOff: false, label: "" },
-                { date: "04/06", dayName: "THU", s1In: "", s1Out: "", s2In: "", s2Out: "", adjust: 0, worked: 0, balance: 7.25, isOff: false, label: "" },
-                { date: "05/06", dayName: "FRI", s1In: "", s1Out: "", s2In: "", s2Out: "", adjust: 0, worked: 0, balance: 7.00, isOff: false, label: "" },
-                { date: "06/06", dayName: "SAT", s1In: "", s1Out: "", s2In: "", s2Out: "", adjust: 0, worked: 0, balance: 0, isOff: true, label: "W" }
+            if (!currentWeekStart) currentWeekStart = getWeekStartSunday();
+            const demoPunches = [
+                { dayName: 'SUN', s1In: '', s1Out: '', s2In: '', s2Out: '', isOff: true },
+                { dayName: 'MON', s1In: '09:27', s1Out: '12:00', s2In: '14:19', s2Out: '17:50', isOff: false },
+                { dayName: 'TUE', s1In: '09:17', s1Out: '12:01', s2In: '14:04', s2Out: '18:00', isOff: false },
+                { dayName: 'WED', s1In: '', s1Out: '', s2In: '', s2Out: '', isOff: false },
+                { dayName: 'THU', s1In: '', s1Out: '', s2In: '', s2Out: '', isOff: false },
+                { dayName: 'FRI', s1In: '', s1Out: '', s2In: '', s2Out: '', isOff: false },
+                { dayName: 'SAT', s1In: '', s1Out: '', s2In: '', s2Out: '', isOff: true }
             ];
-            selectedDayIndex = 2;
+            daysData = mergeSavedDaysIntoWeek(demoPunches, currentWeekStart);
+            selectedDayIndex = getDefaultSelectedDayIndex();
+            lastStdChimeTriggered = false;
+            lastCumChimeTriggered = false;
 
             triggerRecalculate();
             renderTable();
-            showToast("Full-number sample records loaded!", "success");
+            scheduleSave();
+            showToast("Sample records loaded for this week!", "success");
         }
 
         function renderTable() {
@@ -1523,6 +1872,7 @@ Extract dates properly. Do not write any conversational summary or text around t
                 icon.className = 'fa-solid fa-moon';
                 showToast("Switched to Deep Light theme", "info");
             }
+            scheduleSave();
         }
     </script>
 </body>
