@@ -62,7 +62,13 @@
                 </div>
             </div>
             
-            <div class="flex items-center gap-3">
+            <div class="flex items-center gap-3 flex-wrap justify-center">
+                <a href="mobile/index.html" class="px-3 py-1.5 bg-violet-100 hover:bg-violet-200 dark:bg-violet-950 dark:hover:bg-violet-900 text-violet-700 dark:text-violet-300 rounded-lg text-xs font-semibold transition-all border border-violet-200 dark:border-violet-800 flex items-center gap-1.5" title="Switch to mobile view">
+                    <i class="fa-solid fa-mobile-screen-button"></i> Mobile view
+                </a>
+                <a href="home.html?pick=1" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-xs font-semibold transition-all border border-slate-200 dark:border-slate-700 flex items-center gap-1.5" title="Choose view">
+                    <i class="fa-solid fa-grid-2"></i> Change view
+                </a>
                 <span class="text-xs text-slate-500 dark:text-slate-400 font-medium">System Presets:</span>
                 <button onclick="applyPreset('um')" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-505 text-white rounded-lg text-xs font-semibold transition-all shadow-md shadow-indigo-600/10">
                     36h/wk
@@ -353,7 +359,7 @@
                 <div class="px-5 pb-5">
                     <div class="relative">
                         <textarea id="paste-input" rows="3" oninput="scheduleSave()"
-                            placeholder="Paste check-in/out text data here...&#10;01/06 MON  9:27  12:00  14:19  17:50  0.00  6.07  1.18&#10;02/06 TUE  9:17  12:01  14:04  18:00  0.00  6.67  0.58" 
+                            placeholder="Paste check-in/out text data here...&#10;01/06 MON  9:27  12:00  14:19  17:50  0.00  6.07  1.18&#10;02/06 TUE  9:17  12:01  14:04  18:04  0.00  6.73  0.52&#10;03/06 WED  9:20  12:13  13:40  18:20  0.00  7.55  -0.30" 
                             class="w-full bg-slate-50 dark:bg-slate-900 text-slate-850 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-650 border border-slate-200 dark:border-slate-800 rounded-lg p-3 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all"></textarea>
                         <button onclick="handlePasteAction()" class="absolute right-3 bottom-3 bg-indigo-600 hover:bg-indigo-500 text-white px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-md shadow-indigo-600/15 active:scale-95 transition-all">
                             <i class="fa-solid fa-wand-magic-sparkles"></i> Parse Text
@@ -1168,8 +1174,7 @@
 
                 day.worked = minutesToDecimalHours(workedMins);
 
-                const computedBalance = parseFloat((requiredHours - day.worked).toFixed(2));
-                day.balance = computedBalance < 0 ? 0 : computedBalance;
+                day.balance = parseFloat((requiredHours - day.worked).toFixed(2));
             });
         }
 
@@ -1712,10 +1717,10 @@ Extract dates properly. Do not write any conversational summary or text around t
             const demoPunches = [
                 { dayName: 'SUN', s1In: '', s1Out: '', s2In: '', s2Out: '', isOff: true },
                 { dayName: 'MON', s1In: '09:27', s1Out: '12:00', s2In: '14:19', s2Out: '17:50', isOff: false },
-                { dayName: 'TUE', s1In: '09:17', s1Out: '12:01', s2In: '14:04', s2Out: '18:00', isOff: false },
-                { dayName: 'WED', s1In: '', s1Out: '', s2In: '', s2Out: '', isOff: false },
-                { dayName: 'THU', s1In: '', s1Out: '', s2In: '', s2Out: '', isOff: false },
-                { dayName: 'FRI', s1In: '', s1Out: '', s2In: '', s2Out: '', isOff: false },
+                { dayName: 'TUE', s1In: '09:17', s1Out: '12:01', s2In: '14:04', s2Out: '18:04', isOff: false },
+                { dayName: 'WED', s1In: '09:20', s1Out: '12:13', s2In: '13:40', s2Out: '18:20', isOff: false },
+                { dayName: 'THU', s1In: '09:13', s1Out: '12:13', s2In: '13:22', s2Out: '18:29', isOff: false },
+                { dayName: 'FRI', s1In: '09:22', s1Out: '', s2In: '', s2Out: '', isOff: false },
                 { dayName: 'SAT', s1In: '', s1Out: '', s2In: '', s2Out: '', isOff: true }
             ];
             daysData = mergeSavedDaysIntoWeek(demoPunches, currentWeekStart);
