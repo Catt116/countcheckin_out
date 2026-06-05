@@ -63,7 +63,7 @@
             </div>
             
             <div class="flex items-center gap-3 flex-wrap justify-center">
-                <a href="mobile/index.html" class="px-3 py-1.5 bg-violet-100 hover:bg-violet-200 dark:bg-violet-950 dark:hover:bg-violet-900 text-violet-700 dark:text-violet-300 rounded-lg text-xs font-semibold transition-all border border-violet-200 dark:border-violet-800 flex items-center gap-1.5" title="Switch to mobile view">
+                <a href="mobile_index.html" class="px-3 py-1.5 bg-violet-100 hover:bg-violet-200 dark:bg-violet-950 dark:hover:bg-violet-900 text-violet-700 dark:text-violet-300 rounded-lg text-xs font-semibold transition-all border border-violet-200 dark:border-violet-800 flex items-center gap-1.5" title="Switch to mobile view">
                     <i class="fa-solid fa-mobile-screen-button"></i> Mobile view
                 </a>
                 <a href="home.html?pick=1" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-xs font-semibold transition-all border border-slate-200 dark:border-slate-700 flex items-center gap-1.5" title="Choose view">
@@ -1409,20 +1409,18 @@ Extract dates properly. Do not write any conversational summary or text around t
             const phase = getDayWorkPhase(day);
             const currentWorkedMins = computeOptimizerWorkedMins(day, currentTimeMin);
 
-            // Cumulative weekly deficit before today
+            // Net weekly balance before today (shortfalls add, surpluses subtract)
             let weeklyDeficitMins = 0;
             daysData.forEach((d, idx) => {
                 if (idx < selectedDayIndex) {
                     const dReq = getRequiredHoursForDay(d.dayName);
                     const dDeficit = dReq - d.worked;
-                    if (dDeficit > 0) {
-                        weeklyDeficitMins += (dDeficit * 60);
-                    }
+                    weeklyDeficitMins += (dDeficit * 60);
                 }
             });
 
             const totalMinsNeededStd = targetWorkedHoursToday * 60;
-            const totalMinsNeededCum = totalMinsNeededStd + weeklyDeficitMins;
+            const totalMinsNeededCum = Math.max(0, totalMinsNeededStd + weeklyDeficitMins);
 
             document.getElementById('lbl-goal-standard').innerText = `Goal: ${targetWorkedHoursToday.toFixed(2)} hrs`;
             document.getElementById('lbl-goal-cumulative').innerText = `Goal: ${(totalMinsNeededCum / 60).toFixed(2)} hrs`;
